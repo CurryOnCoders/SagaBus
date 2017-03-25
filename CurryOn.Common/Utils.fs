@@ -3,9 +3,9 @@
 open FSharp.Reflection
 open System
 open System.Collections
+open System.Collections.Concurrent
 open System.IO
 open System.Linq
-open System.Runtime.Caching
 open System.Security.Cryptography
 open System.Text
 open System.Text.RegularExpressions
@@ -126,39 +126,30 @@ module Caching =
         abstract member add: 'a -> 'b -> unit
         abstract member getOrAdd: 'a -> ('a -> 'b) -> 'b
 
-     type Cache<'a,'b>(cacheName) = 
-        let cache = new MemoryCache(cacheName)
+     type Cache<'a,'b>() = 
+        let cache = ConcurrentDictionary<_,'b>()
         let getSafeKey key =
             if key |> box |> isNull
-            then String.Empty
-            else key.ToString()
-        member c.has key = key |> getSafeKey |> cache.Contains
+            then String.Empty |> box
+            else key |> box
+        member c.has key = key |> getSafeKey |> cache.ContainsKey
         member c.get key = cache.[getSafeKey key] |> unbox<'b>
-        member c.add key value = cache.Add(getSafeKey key, value, DateTimeOffset.Now.AddDays(1.0)) |> ignore // TODO: Make the absolute expiration date configurable
+        member c.add key value = cache.AddOrUpdate(key |> getSafeKey, value, (fun _ _ -> value)) |> ignore
         member c.getOrAdd key func =
-            let safeKey = getSafeKey key
-            if c.has safeKey 
-            then c.get safeKey
-            else let value = key |> func
-                 c.add safeKey value
-                 value                
+            cache.GetOrAdd(key |> getSafeKey, (fun _ -> key |> func))               
         interface ICache<'a,'b> with
             member c.has key = c.has key
             member c.get key = c.get key
             member c.add key value = c.add key value 
             member c.getOrAdd key func = c.getOrAdd key func
         interface IDisposable with
-            member c.Dispose () = cache.Dispose()    
+            member c.Dispose () = cache.Clear()
 
 [<AutoOpen>]
 module Memoization =
     open Caching 
-
-    [<Literal>]
-    let MemoizationCacheName = "Memoization"
-
     let memoize f =
-        let cache = new Cache<_,_>(MemoizationCacheName)
+        let cache = new Cache<_,_>()
         (fun key -> f |> cache.getOrAdd key)
 
 module Encoding =

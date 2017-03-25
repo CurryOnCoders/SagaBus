@@ -62,7 +62,7 @@
     <Compile Include="Measures.fs" />
     <Compile Include="Lazy.fs" />
     <Compile Include="Task.fs" />
-    <Compile Include="AsyncResult.fs" />
+    <Compile Include="Async.fs" />
     <Compile Include="Patterns.fs" />
     <Compile Include="Linq.fs" />
     <None Include="Script.fsx" />
@@ -80,7 +80,6 @@
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
-    <Reference Include="System.Runtime.Caching" />
     <Reference Include="System.ValueTuple">
       <HintPath>..\packages\System.ValueTuple.4.0.0-rc3-24212-01\lib\netstandard1.1\System.ValueTuple.dll</HintPath>
       <Private>True</Private>

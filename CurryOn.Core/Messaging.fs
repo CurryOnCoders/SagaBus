@@ -1,5 +1,6 @@
 ﻿namespace CurryOn.Core
 
+open Akka.Routing
 open CurryOn.Common
 open System
 
@@ -14,27 +15,33 @@ type IEntity<'id> =
     inherit IEquatable<'id>
     abstract member Id: 'id
 
-type IAggregate<'key, 'root when 'root :> IEntity<'key>> =
-    inherit IEquatable<'key>
+type IAggregateIdentity<'key> =
+    inherit IConsistentHashable
     abstract member Key: 'key
     abstract member Name: string<AggregateName>
     abstract member Tenant: string<Tenant>
 
-type IMessage =
+type IAggregate<'key, 'root when 'root :> IEntity<'key>> =
+    inherit IAggregateIdentity<'key>
+    inherit IEquatable<'key>
+    abstract member Apply : IEvent<'key> -> IAggregate<'key, 'root>
+
+and IMessage<'key> =
+    inherit IAggregateIdentity<'key>
     abstract member Id: Guid
     abstract member CorrelationId: Guid
     abstract member MessageDate: DateTime
 
-type ICommand = 
-    inherit IMessage
+and ICommand<'key> = 
+    inherit IMessage<'key>
     abstract member DateSent: DateTime option
     abstract member DateDelivered: DateTime option
 
-type IEvent =
-    inherit IMessage
+and IEvent<'key> =
+    inherit IMessage<'key>
     abstract member DatePublished: DateTime option
 
 type IBus =
-    abstract member SendCommand: ICommand -> AsyncResult<unit>
-    abstract member PublishEvent: IEvent -> AsyncResult<unit>
+    abstract member SendCommand: ICommand<_> -> AsyncResult<unit>
+    abstract member PublishEvent: IEvent<_> -> AsyncResult<unit>
 

@@ -1,12 +1,16 @@
-﻿#load "Utils.fs"
+﻿#r "System.Configuration"
+#r @"..\packages\FSharp.Quotations.Evaluator.1.0.7\lib\net40\FSharp.Quotations.Evaluator.dll"
+
+#load "Utils.fs"
 #load "Result.fs"
+#load "Extensions.fs"
 #load "Lazy.fs"
 #load "Task.fs"
-#load "AsyncResult.fs"
-#load "TaskResult.fs"
+#load "Async.fs"
 
 open CurryOn.Common
 open CurryOn.Common.Security.Encryption
+open System
 open System.Threading
 open System.Threading.Tasks
 
@@ -71,10 +75,60 @@ asyncIntResult |> AsyncResult.toResult
 
 let intTaskResult =
     tryTask {
-        do! Task.Delay(5000) |> TaskResult.ofTask
+        do! Task.Delay(5000) |> TaskResult.ofUnit
         let! intValue = intResult |> TaskResult.fromResult
         return Thread.CurrentThread.ManagedThreadId
     }
 
 Thread.CurrentThread.ManagedThreadId
 intTaskResult |> TaskResult.toResult
+
+
+module MemoizingCalculator = 
+    type Operation =
+    | Add of decimal * decimal
+    | Subtract of decimal * decimal
+    | Multiply of decimal * decimal
+    | Divide of decimal * decimal
+    
+    let calculate = memoize <| fun operation ->
+        match operation with
+        | Add (addend,adder) ->
+            printfn "Calculating %A + %A" addend adder
+            addend + adder
+        | Subtract (minuend,subtrahend) ->
+            printfn "Calculating %A - %A" minuend subtrahend
+            minuend - subtrahend
+        | Multiply (multiplicand,multiplier) ->
+            printfn "Calculating %A * %A" multiplicand multiplier
+            multiplicand * multiplier
+        | Divide (dividend,divisor) ->
+            printfn "Calculating %A / %A" dividend divisor
+            dividend / divisor
+        
+open MemoizingCalculator
+        
+calculate <| Add (2M, 3M)
+calculate <| Divide (235M, 15M)
+calculate <| Multiply (3284.099M, 523.51M)
+calculate <| Subtract (158M, 78M)
+calculate <| Multiply (3284.099M, 523.51M)
+calculate <| Add (2M, 3M)
+calculate <| Subtract (158M, 78.01M)
+calculate <| Multiply (3284.099M, 523.51M)
+calculate <| Divide (235M, 15M)
+calculate <| Add (2M, 4M)
+calculate <| Add (3M, 2M)
+calculate <| Add (3589M, 8154M)
+
+// Timing Result, 1st Run (i7-4790K 4.0GHZ / 16GB RAM) : Real: 00:01:00.427, CPU: 00:01:00.093, GC gen0: 3266, gen1: 886, gen2: 2
+#time
+{0M..1000000M} |> Seq.pairwise |> Seq.map (fun (x,y) -> calculate <| Multiply (x,y)) |> Seq.toList
+#time
+// Timing Result, 2nd Run (i7-4790K 4.0GHZ / 16GB RAM) : Real: 00:00:01.902, CPU: 00:00:01.953, GC gen0: 89, gen1: 10, gen2: 0
+
+let multiParameterFunction = memoize <| fun (x, y, z) -> 
+    printfn "Executing Multi-Parameter Memoized Function"
+    (x * y) / z
+
+multiParameterFunction (6,13,4)

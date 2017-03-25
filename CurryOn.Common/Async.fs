@@ -95,3 +95,8 @@ type TryAsyncBuilder() =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TryAsync =
     let tryAsync = TryAsyncBuilder()
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module LazyAsync =
+    // TODO: Implement a LazyAsync computation and module
+    ()
