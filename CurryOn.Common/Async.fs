@@ -1,7 +1,9 @@
 ﻿namespace CurryOn.Common
 
 type AsyncResult<'t> = Async<Result<'t>>
+type AsyncResult = AsyncResult<unit>
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AsyncResult =
     let fromResult<'t> (r: Result<'t>) = async { return r }
     
