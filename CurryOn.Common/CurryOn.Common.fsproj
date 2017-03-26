@@ -56,10 +56,10 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Utils.fs" />
+    <Compile Include="Measures.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="Result.fs" />
     <Compile Include="Configuration.fs" />
-    <Compile Include="Measures.fs" />
     <Compile Include="Lazy.fs" />
     <Compile Include="Task.fs" />
     <Compile Include="Async.fs" />

@@ -3,43 +3,39 @@
 open Akka.Routing
 open CurryOn.Common
 open System
-open System.Text.RegularExpressions
 
-[<Measure>] type Tenant         = static member New: string -> string<Tenant>          = (fun v -> {Value = v})
-[<Measure>] type AggregateName  = static member New: string -> string<AggregateName>   = (fun v -> {Value = v})
-[<Measure>] type Version        = static member New (value: #IComparable) = value |> Convert.ToInt32 |> LanguagePrimitives.Int32WithMeasure<Version>
 
 type IValueObject =
     inherit IEquatable<IValueObject>
 
-type IEntity<'id> =
-    inherit IEquatable<'id>
-    abstract member Id: 'id
+type IEntity =
+    abstract member Id: string<EntityId>
 
-type IAggregateIdentity<'key> =
+type IAggregateIdentity =
     inherit IConsistentHashable
-    abstract member Key: 'key
+    abstract member Key: string<AggregateKey>
     abstract member Name: string<AggregateName>
-    abstract member Tenant: string<Tenant>
+    abstract member Tenant: string<Tenant> option
 
-type IAggregate<'key, 'root when 'root :> IEntity<'key>> =
-    inherit IAggregateIdentity<'key>
-    inherit IEquatable<'key>
-    abstract member Apply : IEvent<'key> -> int<Version> -> IAggregate<'key, 'root>
+type IAggregate =
+    inherit IAggregateIdentity
+    abstract member Root: IEntity
+    abstract member LastEvent: int<version>
+    abstract member Apply : IEvent -> int<version> -> IAggregate
 
-and IMessage<'key> =
-    inherit IAggregateIdentity<'key>
-    abstract member Id: Guid
+and IMessage =
+    inherit IAggregateIdentity
+    abstract member MessageId: Guid
     abstract member CorrelationId: Guid
     abstract member MessageDate: DateTime
 
-and ICommand<'key> = 
-    inherit IMessage<'key>
+and ICommand = 
+    inherit IMessage
     abstract member DateSent: DateTime option
-    abstract member DateDelivered: DateTime option
+    abstract member DateProcessed: DateTime option
 
-and IEvent<'key> =
-    inherit IMessage<'key>
+and IEvent =
+    inherit IMessage
     abstract member DatePublished: DateTime option
 
 [<Measure>] 
@@ -83,10 +79,10 @@ type IBusRoute =
 
 type ICommandRouter =
     abstract member Register: MessageType -> IBusEndpoint -> AsyncResult
-    abstract member Route: ICommand<_> -> AsyncResult
+    abstract member Route: ICommand -> AsyncResult
 
 type ICommandReceiver =
-    abstract member ReceiveCommands : unit -> IObservable<ICommand<_>>
+    abstract member ReceiveCommands : unit -> IObservable<ICommand>
 
 /// The IEventHub is the persistence component on an IBusNode.
 /// While there can be multiple Command & Event Receivers and many Comand Routers,
@@ -98,8 +94,8 @@ type IEventReceiver =
     abstract member ReceiveEvents : unit -> IObservable<IEvent<_>> 
 
 type IBus =
-    abstract member SendCommand: ICommand<_> -> AsyncResult
-    abstract member PublishEvent: IEvent<_> -> AsyncResult
+    abstract member SendCommand: ICommand -> AsyncResult
+    abstract member PublishEvent: IEvent -> AsyncResult
 
 type IBusNode =
     inherit IBus
@@ -108,6 +104,6 @@ type IBusNode =
     abstract member EventReceivers: IEventReceiver list
     abstract member EventPublisher: IEventHub
 
-type ISaga<'aggregate, 'key, 'root when 'aggregate :> IAggregate<'key,'root> and 'root :> IEntity<'key>> =
+type ISaga<'aggregate when 'aggregate :> IAggregate> =
     abstract member SagaBus: IBus
 

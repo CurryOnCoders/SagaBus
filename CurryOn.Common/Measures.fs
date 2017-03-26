@@ -77,3 +77,9 @@ module Measures =
 
     // Generates a measure type from a nullable primitive.
     let toMeasureValue<'t,'d when 't :> ValueType and 't: struct and 't: (new: unit -> 't)> (factory: 't -> 'd) (input: Nullable<'t>) = if input.HasValue then factory input.Value else factory Unchecked.defaultof<'t>
+
+    [<Measure>] type Tenant         = static member New: string -> string<Tenant>          = (fun v -> {Value = v})
+    [<Measure>] type AggregateName  = static member New: string -> string<AggregateName>   = (fun v -> {Value = v})
+    [<Measure>] type AggregateKey   = static member New: string -> string<AggregateKey>    = (fun v -> {Value = v})
+    [<Measure>] type EntityId       = static member New: string -> string<EntityId>        = (fun v -> {Value = v})
+    [<Measure>] type version        = static member New (value: #IComparable) = value |> Convert.ToInt32 |> LanguagePrimitives.Int32WithMeasure<version>

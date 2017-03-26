@@ -14,6 +14,7 @@ module Extensions =
 
     type Type with
         member this.IsEquivalentTo (other: Type) = other.IsAssignableFrom(this)
+        member this.AggregateName = this.Name |> AggregateName.New
 
     type Collections.Generic.IDictionary<'k,'v> with
         member this.GetValue key =
