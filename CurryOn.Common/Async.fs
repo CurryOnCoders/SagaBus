@@ -3,6 +3,9 @@
 type AsyncResult<'t> = Async<Result<'t>>
 type AsyncResult = AsyncResult<unit>
 
+module Async =
+    let Result (result: Result<_>) = async { return result }
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AsyncResult =
     let fromResult<'t> (r: Result<'t>) = async { return r }

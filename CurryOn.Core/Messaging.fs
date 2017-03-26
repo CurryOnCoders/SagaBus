@@ -88,8 +88,11 @@ type ICommandRouter =
 type ICommandReceiver =
     abstract member ReceiveCommands : unit -> IObservable<ICommand<_>>
 
-type IEventPublisher =
-    abstract member Publish: IEvent<_> -> Result
+/// The IEventHub is the persistence component on an IBusNode.
+/// While there can be multiple Command & Event Receivers and many Comand Routers,
+/// only one EventStore can be written to, so only one IEventHub can be used.
+type IEventHub =
+    abstract member PersistEvent: IEvent<_> -> AsyncResult
 
 type IEventReceiver =
     abstract member ReceiveEvents : unit -> IObservable<IEvent<_>> 
@@ -103,7 +106,7 @@ type IBusNode =
     abstract member CommandRouters: Map<MessageType, ICommandRouter>
     abstract member CommandReceivers: ICommandReceiver list
     abstract member EventReceivers: IEventReceiver list
-    abstract member EventPublisher: IEventPublisher
+    abstract member EventPublisher: IEventHub
 
 type ISaga<'aggregate, 'key, 'root when 'aggregate :> IAggregate<'key,'root> and 'root :> IEntity<'key>> =
     abstract member SagaBus: IBus
