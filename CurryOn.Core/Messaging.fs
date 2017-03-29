@@ -3,7 +3,7 @@
 open Akka.Routing
 open CurryOn.Common
 open System
-
+open System.Threading.Tasks
 
 type IValueObject =
     inherit IEquatable<IValueObject>
@@ -82,7 +82,7 @@ type ICommandRouter =
     abstract member Route: ICommand -> AsyncResult
 
 type ICommandReceiver =
-    abstract member ReceiveCommands : unit -> IObservable<ICommand>
+    abstract member ReceiveCommands : unit -> AsyncResult<IObservable<ICommand>>
 
 /// The IEventHub is the persistence component on an IBusNode.
 /// While there can be multiple Command & Event Receivers and many Comand Routers,
@@ -91,11 +91,32 @@ type IEventHub =
     abstract member PersistEvent: IEvent<_> -> AsyncResult
 
 type IEventReceiver =
-    abstract member ReceiveEvents : unit -> IObservable<IEvent<_>> 
+    abstract member ReceiveEvents : unit -> AsyncResult<IObservable<IEvent>>
+    
+type SubscriptionType =
+| Persistent
+| Volatile
+
+type SubscriptionMode =
+| FromCurrent
+| FromBeginning
+| FromIndex of int64
+
+type ISubscription =
+    abstract member Name: string
+    abstract member Type: SubscriptionType
+    abstract member Mode: SubscriptionMode
+    abstract member HandleEvent: IEvent -> Result
 
 type IBus =
     abstract member SendCommand: ICommand -> AsyncResult
     abstract member PublishEvent: IEvent -> AsyncResult
+    abstract member Subscribe: ISubscription -> AsyncResult
+
+type IBusClient =
+    abstract member SendCommand: ICommand -> Task<Result>
+    abstract member PublishEvent: IEvent -> Task<Result>
+    abstract member Subscribe: ISubscription -> Task<Result>
 
 type IBusNode =
     inherit IBus
@@ -107,3 +128,47 @@ type IBusNode =
 type ISaga<'aggregate when 'aggregate :> IAggregate> =
     abstract member SagaBus: IBus
 
+type IComponentWithConnection<'connection> =
+    inherit IComponent
+    abstract member Connect: unit -> AsyncResult<'connection>
+
+type IComponentWithCredentials<'credentials> =
+    inherit IComponent
+    abstract member GetCredentials: unit -> Result<'credentials>
+
+type SerializationFormat = 
+    | Xml 
+    | Json
+    | Wcf
+    | Positional
+    | Compressed of SerializationFormat   
+    | Detect
+    | Unsupported
+    with
+        member fmt.UnderlyingFormat =
+            match fmt with
+            | Xml -> Xml
+            | Json -> Json
+            | Wcf -> Wcf
+            | Positional -> Positional
+            | Compressed format ->
+                match format with
+                | Xml -> Xml
+                | Json -> Json
+                | Wcf -> Wcf
+                | Positional -> Positional
+                | Detect -> Detect
+                | _-> Unsupported
+            | Detect -> Detect
+            | Unsupported -> Unsupported
+
+
+type IMessageMetadata =
+    abstract member CorrelationId: Guid
+    abstract member MessageId: Guid
+    abstract member MessageDate: DateTime
+    abstract member MessageName: string<TypeName>
+    abstract member MessageFormat: SerializationFormat
+    abstract member AggregateName: string<AggregateName>
+    abstract member AggregateKey: string<AggregateKey>
+    abstract member Tenant: string<Tenant>

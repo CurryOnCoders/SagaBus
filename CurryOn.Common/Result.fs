@@ -12,6 +12,28 @@ with
         result.IsSuccessful |> not
 
 type Result = Result<unit>
+
+module Result =
+    let ofOption optionValue = 
+        match optionValue with
+        | Some value -> Success value
+        | None -> Failure <| exn "Option.None"
+
+    let toOption result =
+        match result with
+        | Success value -> Some value
+        | Failure _ -> None
+
+module Option =
+    let ofResult result =
+        match result with
+        | Success value -> Some value
+        | Failure _ -> None
+
+    let toResult optionValue =
+        match optionValue with
+        | Some value -> Success value
+        | None -> Failure <| exn "Option.None"
     
 module private TryMonad =
     let bind<'t,'u> (v: Result<'t>) (map: 't -> Result<'u>) =

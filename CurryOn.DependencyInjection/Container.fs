@@ -9,12 +9,17 @@ open System.Reflection
 type IComponent = 
     interface end
 
+[<Measure>] 
+type TypeName = 
+    static member New: string -> string<TypeName> = fun value -> {Value = value}
+
 type IContainer =
     abstract member InstanceOf<'c when 'c :> IComponent> : unit   -> 'c Result
     abstract member InstanceOf<'c when 'c :> IComponent> : obj [] -> 'c Result
     abstract member RegisterSingleton<'c when 'c :> IComponent> : 'c -> Result
     abstract member RegisterFactory<'c when 'c :> IComponent> : (unit -> 'c) -> Result
     abstract member RegisterConstructor<'c when 'c :> IComponent> : ConstructorInfo -> Result
+    abstract member GetNamedType : string<TypeName> -> Type Result
 
 type TypeInjector<'c when 'c :> IComponent> =
 | Singleton of 'c
@@ -31,6 +36,8 @@ with
         | Singleton instance -> instance
         | Factory factory -> factory ()
         | Constructor ctor -> ctor.Invoke parameters |> unbox<'c>
+
+
 
 module Context =
     let private typeInjectors = new ConcurrentDictionary<Type, TypeInjector<IComponent>>()
@@ -66,6 +73,17 @@ module Context =
             return assembiles |> Seq.collect (fun assembly -> assembly.GetTypes())
                               |> Seq.distinctBy (fun t -> t.FullName)
                               |> Seq.toList
+        }
+    
+    let internal isNamedType (knownType: Type) (typeName: string<TypeName>) =
+        knownType.AssemblyQualifiedName = typeName.Value ||
+        (sprintf "%s.%s" knownType.Namespace knownType.Name) = typeName.Value ||
+        knownType.Name = typeName.Value
+    
+    let getNamedType (typeName: string<TypeName>) =
+        attempt {
+            let! knownTypes = getAllKnownTypes ()
+            return! knownTypes |> List.tryFind (fun knownType -> isNamedType knownType typeName) |> Option.toResult
         }
             
     let getInjectionTypeCandidates = memoize <| fun (injectionType: Type) ->
@@ -173,4 +191,5 @@ module Context =
             member __.RegisterSingleton singletonInstance = registerSingleton singletonInstance
             member __.RegisterFactory factory = registerFactory factory
             member __.RegisterConstructor ctor = registerConstructor ctor
+            member __.GetNamedType typeName = getNamedType typeName
         }

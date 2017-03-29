@@ -1,4 +1,4 @@
-﻿namespace CurryOn.Common.AssemblyInfo
+﻿namespace CurryOn.Msmq.AssemblyInfo
 
 open System.Reflection
 open System.Runtime.CompilerServices
@@ -7,16 +7,14 @@ open System.Runtime.InteropServices
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[<assembly: AssemblyTitle("CurryOn.Common")>]
+[<assembly: AssemblyTitle("CurryOn.Msmq")>]
 [<assembly: AssemblyDescription("")>]
 [<assembly: AssemblyConfiguration("")>]
 [<assembly: AssemblyCompany("")>]
-[<assembly: AssemblyProduct("CurryOn.Common")>]
-[<assembly: AssemblyCopyright("Copyright ©  2016")>]
+[<assembly: AssemblyProduct("CurryOn.Msmq")>]
+[<assembly: AssemblyCopyright("Copyright ©  2017")>]
 [<assembly: AssemblyTrademark("")>]
 [<assembly: AssemblyCulture("")>]
-[<assembly: InternalsVisibleTo("CurryOn.Core")>]
-
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
@@ -24,7 +22,7 @@ open System.Runtime.InteropServices
 [<assembly: ComVisible(false)>]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[<assembly: Guid("78b27b61-4f5c-4e69-b18f-4b6f6303f77b")>]
+[<assembly: Guid("27c812a7-01a8-40f5-b3a5-9cbdf4acc43c")>]
 
 // Version information for an assembly consists of the following four values:
 // 
