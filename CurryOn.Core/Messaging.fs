@@ -107,3 +107,6 @@ type IBusNode =
 type ISaga<'aggregate when 'aggregate :> IAggregate> =
     abstract member SagaBus: IBus
 
+type IMessageProcessingAgent =
+    inherit IComponent
+    abstract member ProcessMessage: IMessage -> AsyncResult
