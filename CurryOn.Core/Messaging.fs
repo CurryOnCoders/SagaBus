@@ -136,6 +136,10 @@ type IComponentWithCredentials<'credentials> =
     inherit IComponent
     abstract member GetCredentials: unit -> Result<'credentials>
 
+type IMessageProcessingAgent =
+    inherit IComponent
+    abstract member ProcessMessage: IMessage -> AsyncResult
+
 type SerializationFormat = 
     | Xml 
     | Json

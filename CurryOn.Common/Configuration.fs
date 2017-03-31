@@ -18,13 +18,11 @@ module Configuration =
             member this.AssemblySearchPath = this.AssemblySearchPath
 
     let SectionName = ContextConfigurationSection.SectionName
-
-    let load<'configuration> () =
+    let load () =
         attempt {
-            return ConfigurationManager.GetSection(SectionName) |> unbox<'configuration>
+            return ConfigurationManager.GetSection(SectionName) |> unbox<IConfiguration>
         }
-
-    let Current = 
-        match load<IConfiguration>() with
+    let Common = 
+        match load() with
         | Success config -> config
         | Failure _ -> new ContextConfigurationSection() :> IConfiguration

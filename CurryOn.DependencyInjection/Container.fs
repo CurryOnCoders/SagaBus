@@ -41,7 +41,7 @@ with
 
 module Context =
     let private typeInjectors = new ConcurrentDictionary<Type, TypeInjector<IComponent>>()
-    let private binaryDirectories = [Environment.CurrentDirectory; Configuration.Current.AssemblySearchPath;] |> List.map DirectoryInfo
+    let private binaryDirectories = [Environment.CurrentDirectory; Configuration.Common.AssemblySearchPath;] |> List.map DirectoryInfo
 
     let private registerTypeInjector<'c when 'c :> IComponent> (injector: TypeInjector<IComponent>) = 
         attempt {
@@ -161,7 +161,7 @@ module Context =
                           if candidatesWithConfigurationConstructors |> List.isEmpty
                           then return! Failure (exn <| sprintf "No Type Implementing %s Could be Found" injectionType.Name)
                           else let (bestMatch, ctor) = candidatesWithContainerConstructors.Head
-                               return Factory <| fun () -> ctor.Invoke [| Configuration.Current |] |> unbox<IComponent>
+                               return Factory <| fun () -> ctor.Invoke [| Configuration.Common |] |> unbox<IComponent>
                      else let (bestMatch, ctor) = candidatesWithContainerConstructors.Head
                           return Factory <| fun () -> ctor.Invoke [| Container |] |> unbox<IComponent>
                 else let (bestMatch, ctor) = candidatesWithDefaultConstructors.Head
