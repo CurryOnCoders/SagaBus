@@ -14,7 +14,7 @@ type MsmqReader (container: IContainer) =
     interface ICommandReceiver with
         member __.ReceiveCommands () = 
             tryAsync {
-                let queuePaths = Configuration.Current.CommandReceivers 
+                let queuePaths = Configuration.Bus.CommandReceivers 
                                  |> Seq.filter (fun connection -> connection.ConnectionType = typeof<MessageQueue>.Name)
                                  |> Seq.map (fun connection -> connection.ConnectionString)
                                  |> Seq.toList

@@ -216,7 +216,14 @@ module Configuration =
             member this.EventHub = this.EventHub :> IEventHubConfiguration
             member this.Agents = this.Agents :> IAgentConfiguration
             
-    let Current = 
-        match Configuration.load<IBusConfiguration>() with
+    let reload<'a> () =
+        attempt {
+            return ConfigurationManager.GetSection(Configuration.SectionName) |> unbox<'a>
+        }
+
+    let load<'a> = memoize reload<'a>
+
+    let Bus =
+        match load<IBusConfiguration>() with
         | Success config -> config
-        | Failure _ -> new BusConfigurationSection() :> IBusConfiguration
+        | Failure _ -> BusConfigurationSection() :> IBusConfiguration
