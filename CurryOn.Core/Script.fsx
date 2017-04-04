@@ -11,21 +11,28 @@
 #r @"..\packages\System.Collections.Immutable.1.3.1\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll"
 #r @"..\packages\FSharp.Quotations.Evaluator.1.0.7\lib\net40\FSharp.Quotations.Evaluator.dll"
 #r @"..\CurryOn.Common\bin\debug\CurryOn.Common.dll"
+#r @"..\CurryOn.DependencyInjection\bin\debug\CurryOn.DependencyInjection.dll"
 #load "Messaging.fs"
 #load "Serialization.fs"
 
 open Akka.Routing
 open CurryOn.Common
 open CurryOn.Core
+open CurryOn.Core.Serialization
 open MBrace.FsPickler.Json
 open System
 open System.IO
+
+type DomainClassification =
+| TypeA of int
+| TypeB of string
 
 [<CLIMutable>]
 type DomainEntity =
     {
         Id: Guid;
         Name: string<AggregateName>;
+        Classification: DomainClassification;
     }
     interface IEntity with
         member this.Id = this.Id.ToString() |> EntityId.New
@@ -68,7 +75,22 @@ type DomainAggregate =
         member this.ConsistentHashKey = this.AggregateKey |> box
 
 
-let stream = new MemoryStream()
-let jsonSerializer = FsPickler.CreateJsonSerializer(true)
-jsonSerializer.Serialize(stream, {Id = Guid.NewGuid(); Name = "Test Event" |> AggregateName.New; Version = 12<version>})
-let json = stream.ToArray() |> Serialization.UTF8NoBOM.GetString
+let aggregateInstance =
+    { Root = { Id = Guid.NewGuid(); Name = "Test" |> AggregateName.New; Classification = TypeA 13 }; LastEvent = 1<version> }
+
+let xml = aggregateInstance |> toXml
+let json = aggregateInstance |> toJson
+
+attempt {
+    let! bson = aggregateInstance |> serialize Bson
+    return! bson |> deserialize<DomainAggregate> Bson
+}
+
+json |> parseJson<DomainAggregate>
+xml |> parseXml<DomainAggregate>
+
+attempt {
+    let! binary = aggregateInstance |> serialize Binary
+    let! deserializedBinary = binary |> deserialize<DomainAggregate> Binary
+    return deserializedBinary = aggregateInstance
+}

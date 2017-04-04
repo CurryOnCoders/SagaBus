@@ -143,28 +143,35 @@ type IMessageProcessingAgent =
 type SerializationFormat = 
     | Xml 
     | Json
+    | Binary
+    | Bson
     | Wcf
     | Positional
+    | Delimited
     | Compressed of SerializationFormat   
     | Detect
-    | Unsupported
     with
         member fmt.UnderlyingFormat =
             match fmt with
             | Xml -> Xml
             | Json -> Json
+            | Binary -> Binary
+            | Bson -> Bson
             | Wcf -> Wcf
             | Positional -> Positional
+            | Delimited -> Delimited
             | Compressed format ->
                 match format with
                 | Xml -> Xml
                 | Json -> Json
+                | Binary -> Binary
+                | Bson -> Bson
                 | Wcf -> Wcf
                 | Positional -> Positional
+                | Delimited -> Delimited
                 | Detect -> Detect
-                | _-> Unsupported
+                | Compressed _ -> failwith "Only one layer of comrpession can be used for serialization"
             | Detect -> Detect
-            | Unsupported -> Unsupported
 
 
 type IMessageMetadata =
