@@ -1,0 +1,8 @@
+﻿.clickable {
+    cursor: pointer;    
+}
+
+h3.clickable:hover {
+    background-color: #CECECE;
+    color: #3355A9;
+}

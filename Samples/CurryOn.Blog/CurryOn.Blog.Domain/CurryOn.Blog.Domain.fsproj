@@ -5,18 +5,14 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>78b27b61-4f5c-4e69-b18f-4b6f6303f77b</ProjectGuid>
+    <ProjectGuid>e3ef4afb-a48b-4c00-81b2-a012435e8c59</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>CurryOn.Common</RootNamespace>
-    <AssemblyName>CurryOn.Common</AssemblyName>
+    <RootNamespace>CurryOn.Blog.Domain</RootNamespace>
+    <AssemblyName>CurryOn.Blog.Domain</AssemblyName>
     <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.1.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>CurryOn.Common</Name>
-    <SccProjectName>SAK</SccProjectName>
-    <SccProvider>SAK</SccProvider>
-    <SccAuxPath>SAK</SccAuxPath>
-    <SccLocalPath>SAK</SccLocalPath>
+    <Name>CurryOn.Blog.Domain</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -55,35 +51,33 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Utils.fs" />
-    <Compile Include="Measures.fs" />
-    <Compile Include="Extensions.fs" />
-    <Compile Include="Result.fs" />
-    <Compile Include="Configuration.fs" />
-    <Compile Include="Lazy.fs" />
-    <Compile Include="Task.fs" />
-    <Compile Include="Async.fs" />
-    <Compile Include="Patterns.fs" />
-    <Compile Include="Linq.fs" />
+    <Compile Include="Blog.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="FSharp.Quotations.Evaluator">
-      <HintPath>..\packages\FSharp.Quotations.Evaluator.1.0.7\lib\net40\FSharp.Quotations.Evaluator.dll</HintPath>
-    </Reference>
     <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
+    <Reference Include="FSharp.Core">
+      <Name>FSharp.Core</Name>
+      <AssemblyName>FSharp.Core.dll</AssemblyName>
+      <HintPath>$(MSBuildProgramFiles32)\Reference Assemblies\Microsoft\FSharp\.NETFramework\v4.0\$(TargetFSharpCoreVersion)\FSharp.Core.dll</HintPath>
     </Reference>
     <Reference Include="System" />
-    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.ValueTuple">
-      <HintPath>..\Samples\CurryOn.Blog\packages\System.ValueTuple.4.4.0-preview2-25405-01\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
+      <HintPath>..\packages\System.ValueTuple.4.4.0-preview2-25405-01\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
     </Reference>
-    <Reference Include="System.Xml" />
+    <ProjectReference Include="..\..\..\CurryOn.Common\CurryOn.Common.fsproj">
+      <Name>CurryOn.Common</Name>
+      <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\CurryOn.Core\CurryOn.Core.fsproj">
+      <Name>CurryOn.Core</Name>
+      <Project>{28eee885-afee-4de2-bfd6-9b36bdb7c11a}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

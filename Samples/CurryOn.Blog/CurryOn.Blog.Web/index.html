@@ -1,0 +1,55 @@
+﻿<!DOCTYPE html>
+<html data-ng-app="blog">
+    <head>
+        <meta charset="utf-8" />
+        <title>CurryOn Blog</title>
+        <link rel="stylesheet" type="text/css" href="Content/tether/tether.min.css" />
+        <link rel="stylesheet" type="text/css" href="Content/bootstrap.min.css" />
+        <link rel="stylesheet" type="text/css" href="Content/index.css" />
+        <script type="text/javascript" src="Scripts/jquery-3.1.1.min.js"></script>
+        <script type="text/javascript" src="Scripts/tether.min.js"></script>
+        <script type="text/javascript" src="Scripts/bootstrap.min.js"></script>
+        <script type="text/javascript" src="Scripts/angular.min.js"></script>
+        <script type="text/javascript" src="Scripts/jquery.signalR-2.2.2.min.js"></script>
+    </head>
+    <body>
+        <nav class="navbar navbar-light bg-faded">
+            <div class="navbar-brand">CurryOn</div>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav mr-auto">
+                    <li class="nav-item active">Home</li>
+                </ul>
+            </div>
+        </nav> 
+        <div class="jumbotron bg-primary">
+            <h1>CurryOn Blog</h1>
+        </div> 
+        <div class="container" data-ng-controller="blogHome">
+            <h2>{{blog.name}}</h2>
+            <h4>{{blog.description}}</h4>
+            <div data-ng-repeat="post in blog.posts">
+                <table class="table table-responsive">
+                    <tr>
+                        <td colspan="2">
+                            <h3 class="clickable" data-ng-click="service.loadBlogPost(post.blogPostId)">{{post.title}}</h3>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-left">
+                            By: <span class="font-italic">{{post.author}}</span>
+                        </td>
+                        <td class="text-right">
+                            {{post.date}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" class="font-italic">
+                            {{post.summary}}...
+                        </td>
+                    </tr>
+                </table>                
+            </div>
+        </div>
+        <script type="text/javascript" src="Scripts/index.js"></script>
+    </body>
+</html>
