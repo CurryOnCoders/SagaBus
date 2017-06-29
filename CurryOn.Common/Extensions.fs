@@ -4,6 +4,7 @@ open FSharp.Quotations
 open FSharp.Quotations.Patterns
 open FSharp.Quotations.Evaluator
 open System
+open System.Reflection
 open System.Threading.Tasks
 
 [<AutoOpen>]
@@ -14,7 +15,7 @@ module Extensions =
 
     type Type with
         member this.IsEquivalentTo (other: Type) = other.IsAssignableFrom(this)
-        member this.AggregateName = this.Name |> AggregateName.New
+        member this.AggregateName = this.Name
 
     type Collections.Generic.IDictionary<'k,'v> with
         member this.GetValue key =

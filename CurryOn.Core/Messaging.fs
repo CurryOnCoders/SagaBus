@@ -5,45 +5,43 @@ open CurryOn.Common
 open System
 open System.Threading.Tasks
 
-type IValueObject =
-    inherit IEquatable<IValueObject>
-
-type IEntity =
-    abstract member Id: string<EntityId>
+type SnapshotPolicy =
+| EveryEvent
+| EventCount of int64
+| TimeBased of TimeSpan
 
 type IAggregateIdentity =
     inherit IConsistentHashable
-    abstract member Key: string<AggregateKey>
-    abstract member Name: string<AggregateName>
-    abstract member Tenant: string<Tenant> option
+    abstract member AggregateName: string
+    abstract member AggregateKey: string    
+    abstract member Tenant: string option
 
-type IAggregate =
-    inherit IAggregateIdentity
-    abstract member Root: IEntity
-    abstract member LastEvent: int<version>
-    abstract member Apply : IEvent -> int<version> -> IAggregate
-
-and IMessage =
+type IMessageHeader =
     inherit IAggregateIdentity
     abstract member MessageId: Guid
     abstract member CorrelationId: Guid
     abstract member MessageDate: DateTime
 
-and ICommand = 
-    inherit IMessage
-    abstract member DateSent: DateTime option
-    abstract member DateProcessed: DateTime option
+type IMessageBody = interface end
 
-and IEvent =
-    inherit IMessage
-    abstract member DatePublished: DateTime option
+type ICommand = 
+    inherit IMessageBody
 
-[<Measure>] 
-type EndpointAddress = 
-    static member New: string -> string<EndpointAddress> = (fun v -> {Value = v})
+type IEvent =
+    inherit IMessageBody
+
+type IMessage =
+    abstract member Header: IMessageHeader
+    abstract member Body: IMessageBody
+
+type IAggregate =
+    inherit IAggregateIdentity
+    abstract member SnapshotPolicy: SnapshotPolicy
+    abstract member LastEventNumber: int64
+    abstract member Apply : IEvent -> int64 -> IAggregate
 
 type IBusEndpoint =
-    abstract member Address: string<EndpointAddress>
+    abstract member Address: string
 
 [<CustomEquality>]
 [<CustomComparison>]
@@ -78,20 +76,20 @@ type IBusRoute =
     abstract member Endpoint: IBusEndpoint
 
 type ICommandRouter =
-    abstract member Register: MessageType -> IBusEndpoint -> AsyncResult
-    abstract member Route: ICommand -> AsyncResult
+    abstract member Register: MessageType -> IBusEndpoint -> Task<unit>
+    abstract member Route: ICommand -> Task<unit>
 
 type ICommandReceiver =
-    abstract member ReceiveCommands : unit -> AsyncResult<IObservable<ICommand>>
+    abstract member ReceiveCommands : unit -> Task<IObservable<ICommand>>
 
 /// The IEventHub is the persistence component on an IBusNode.
 /// While there can be multiple Command & Event Receivers and many Comand Routers,
 /// only one EventStore can be written to, so only one IEventHub can be used.
 type IEventHub =
-    abstract member PersistEvent: IEvent<_> -> AsyncResult
+    abstract member PersistEvent: IEvent<_> -> Task<unit>
 
 type IEventReceiver =
-    abstract member ReceiveEvents : unit -> AsyncResult<IObservable<IEvent>>
+    abstract member ReceiveEvents : unit -> Task<IObservable<IEvent>>
     
 type SubscriptionType =
 | Persistent
@@ -109,9 +107,9 @@ type ISubscription =
     abstract member HandleEvent: IEvent -> Result
 
 type IBus =
-    abstract member SendCommand: ICommand -> AsyncResult
-    abstract member PublishEvent: IEvent -> AsyncResult
-    abstract member Subscribe: ISubscription -> AsyncResult
+    abstract member SendCommand: ICommand -> Task<unit>
+    abstract member PublishEvent: IEvent -> Task<unit>
+    abstract member Subscribe: ISubscription -> Task<unit>
 
 type IBusClient =
     abstract member SendCommand: ICommand -> Task<Result>
@@ -130,7 +128,7 @@ type ISaga<'aggregate when 'aggregate :> IAggregate> =
 
 type IComponentWithConnection<'connection> =
     inherit IComponent
-    abstract member Connect: unit -> AsyncResult<'connection>
+    abstract member Connect: unit -> Task<'connection>
 
 type IComponentWithCredentials<'credentials> =
     inherit IComponent
@@ -138,7 +136,7 @@ type IComponentWithCredentials<'credentials> =
 
 type IMessageProcessingAgent =
     inherit IComponent
-    abstract member ProcessMessage: IMessage -> AsyncResult
+    abstract member ProcessMessage: IMessage -> Task<unit>
 
 type SerializationFormat = 
     | Xml 
@@ -178,8 +176,8 @@ type IMessageMetadata =
     abstract member CorrelationId: Guid
     abstract member MessageId: Guid
     abstract member MessageDate: DateTime
-    abstract member MessageName: string<TypeName>
+    abstract member MessageName: string
     abstract member MessageFormat: SerializationFormat
-    abstract member AggregateName: string<AggregateName>
-    abstract member AggregateKey: string<AggregateKey>
-    abstract member Tenant: string<Tenant>
+    abstract member AggregateName: string
+    abstract member AggregateKey: string
+    abstract member Tenant: string

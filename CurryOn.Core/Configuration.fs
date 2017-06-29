@@ -1,12 +1,19 @@
 ﻿namespace CurryOn.Core
 
 open CurryOn.Common
+open System
 open System.Configuration
 open System.Net
 
 type IConnectionConfiguration =
     abstract member ConnectionType: string
     abstract member ConnectionString: string
+
+type IReceiverConfiguration =
+    abstract member ReceiverType: string
+    abstract member Connections: IConnectionConfiguration seq
+    abstract member ReceiveTimeout: TimeSpan
+    abstract member MaximumConcurrentMessages: int
 
 type ICommandRouteConfiguration =
     abstract member CommandType: string
@@ -28,7 +35,7 @@ type IEventHubConfiguration =
     abstract member EventStoreEndpoint: IPEndPoint
 
 type IAggregateAgentConfiguration =
-    abstract member AggregateName: string<AggregateName>
+    abstract member AggregateName: string
     abstract member NumberOfAgents: int
 
 type IAgentConfiguration =
@@ -37,7 +44,7 @@ type IAgentConfiguration =
 
 type IBusConfiguration =
     inherit IConfiguration
-    abstract member CommandReceivers: IConnectionConfiguration seq
+    abstract member CommandReceivers: IReceiverConfiguration seq
     abstract member CommandRouters: ICommandRouterConfiguration seq
     abstract member EventReceivers: IConnectionConfiguration seq
     abstract member EventHub: IEventHubConfiguration
@@ -59,12 +66,44 @@ module Configuration =
             member this.ConnectionString = this.ConnectionString
 
     [<ConfigurationCollection(typeof<ConnectionConfigurationElement>, AddItemName = "connection")>]
-    type ConnectionConfigurationElementCollection() =
+    type ConnectionConfigurationElementCollection () =
         inherit ConfigurationElementCollection()
         override this.CreateNewElement() = new ConnectionConfigurationElement() :> ConfigurationElement
         override this.GetElementKey element = (element |> unbox<ConnectionConfigurationElement>).ConnectionType |> box
         interface IConnectionConfiguration seq with
             member this.GetEnumerator() = (Seq.cast<IConnectionConfiguration> this).GetEnumerator()
+
+    type ReceiverConfigurationElement () =
+        inherit ConfigurationElement()
+        [<ConfigurationProperty("receiverType", IsRequired = true)>]
+        member this.ReceiverType
+            with get () = this.["receiverType"] |> unbox<string>
+            and set (value: string) = this.["receiverType"] <- value
+        [<ConfigurationProperty("receiveTimeout", IsRequired = false, DefaultValue = 300)>]
+        member this.ReceiveTimeout
+            with get () = this.["receiveTimeout"] |> unbox<int>
+            and set (value: int) = this.["receiveTimeout"] <- value
+        [<ConfigurationProperty("maxConcurrentMessages", IsRequired = false, DefaultValue = 100)>]
+        member this.MaxConcurrentMessages
+            with get () = this.["maxConcurrentMessages"] |> unbox<int>
+            and set (value: int) = this.["maxConcurrentMessages"] <- value
+        [<ConfigurationProperty("connections")>]
+        member this.Connections
+            with get () = this.["connections"] :?> ConnectionConfigurationElementCollection
+            and set (value: ConnectionConfigurationElementCollection) = this.["connections"] <- value
+        interface IReceiverConfiguration with
+            member this.ReceiverType = this.ReceiverType
+            member this.ReceiveTimeout = this.ReceiveTimeout |> float |> TimeSpan.FromSeconds
+            member this.MaximumConcurrentMessages = this.MaxConcurrentMessages
+            member this.Connections = this.Connections :> IConnectionConfiguration seq
+
+    [<ConfigurationCollection(typeof<ReceiverConfigurationElement>, AddItemName = "receiver")>]
+    type ReceiverConfigurationElementCollection () =
+        inherit ConfigurationElementCollection()
+        override this.CreateNewElement() = new ReceiverConfigurationElement() :> ConfigurationElement
+        override this.GetElementKey element = (element |> unbox<ReceiverConfigurationElement>).ReceiverType |> box
+        interface IReceiverConfiguration seq with
+            member this.GetEnumerator() = (Seq.cast<IReceiverConfiguration> this).GetEnumerator()
 
     type CommandRouteConfigurationElement () =
         inherit ConfigurationElement()
@@ -161,7 +200,7 @@ module Configuration =
             with get () = this.["numberOfAgents"] :?> int
             and set (value: int) = this.["numberOfAgents"] <- value
         interface IAggregateAgentConfiguration with
-            member this.AggregateName = this.AggregateName |> AggregateName.New
+            member this.AggregateName = this.AggregateName
             member this.NumberOfAgents = this.NumberOfAgents
 
 
@@ -191,8 +230,8 @@ module Configuration =
         inherit Configuration.ContextConfigurationSection()
         [<ConfigurationProperty("commandReceivers")>]
         member this.CommandReceivers
-            with get () = this.["commandReceivers"] :?> ConnectionConfigurationElementCollection
-            and set (value: ConnectionConfigurationElementCollection) = this.["commandReceivers"] <- value
+            with get () = this.["commandReceivers"] :?> ReceiverConfigurationElementCollection
+            and set (value: ReceiverConfigurationElementCollection) = this.["commandReceivers"] <- value
         [<ConfigurationProperty("commandRouters")>]
         member this.CommandRouters
             with get () = this.["commandRouters"] :?> CommandRouterConfigurationElementCollection
@@ -210,7 +249,7 @@ module Configuration =
             with get () = this.["agents"] :?> AgentConfigurationElement
             and set (value: AgentConfigurationElement) = this.["agents"] <- value
         interface IBusConfiguration with
-            member this.CommandReceivers = this.CommandReceivers :> IConnectionConfiguration seq
+            member this.CommandReceivers = this.CommandReceivers :> IReceiverConfiguration seq
             member this.CommandRouters = this.CommandRouters :> ICommandRouterConfiguration seq
             member this.EventReceivers = this.EventReceivers :> IConnectionConfiguration seq
             member this.EventHub = this.EventHub :> IEventHubConfiguration

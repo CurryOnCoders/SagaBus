@@ -1,0 +1,4 @@
+﻿namespace CurryOn.Common.Domain
+
+
+
