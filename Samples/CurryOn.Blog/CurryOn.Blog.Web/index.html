@@ -13,11 +13,18 @@
         <script type="text/javascript" src="Scripts/jquery.signalR-2.2.2.min.js"></script>
     </head>
     <body>
-        <nav class="navbar navbar-light bg-faded">
+        <nav class="navbar navbar-toggleable-md navbar-light bg-faded">
+            <button class="navbar-toggler navbar-toggler-right" type="button" data-toggle="collapse" data-target="#navigationLinks" 
+                    aria-controls="navbarText" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
             <div class="navbar-brand">CurryOn</div>
-            <div class="collapse navbar-collapse">
+            <div id="navigationLinks" class="collapse navbar-collapse" data-ng-controller="blogNavigation">
                 <ul class="navbar-nav mr-auto">
-                    <li class="nav-item active">Home</li>
+                    <li class="nav-item nav-link active" data-ng-click="navigateTo('home')">Home</li>
+                    <li class="nav-item nav-link" data-ng-hide="service.currentUser.isLoggedIn" data-ng-click="navigateTo('logIn')">Log In</li>
+                    <li class="nav-item nav-link" data-ng-hide="service.currentUser.isLoggedIn" data-ng-click="navigateTo('registration')">Register</li>
+                    <li class="nav-item nav-link" data-ng-hide="!service.currentUser.isLoggedIn" data-ng-click="navigateTo('logOut')">Log Out</li>
                 </ul>
             </div>
         </nav> 

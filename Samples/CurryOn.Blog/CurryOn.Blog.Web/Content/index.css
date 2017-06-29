@@ -6,3 +6,7 @@ h3.clickable:hover {
     background-color: #CECECE;
     color: #3355A9;
 }
+
+.nav-link {
+    cursor: pointer;
+}
