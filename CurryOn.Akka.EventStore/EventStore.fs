@@ -1,5 +1,7 @@
 ﻿namespace Akka.Persistence.EventStore
 
+open Akka.FSharp
+open CurryOn.Akka.EventStore
 open CurryOn.Common
 open CurryOn.Core
 open EventStore.ClientAPI
@@ -9,6 +11,7 @@ open FSharp.Control
 open System
 open System.Net.Http
 open System.Threading.Tasks
+module Config = Akka.FSharp.Configuration
 
 type GetStreamRequest =
 | All
@@ -111,174 +114,16 @@ module EventStore =
             } 
         }
 
+    let settings = lazy(Settings.Load <| Config.load())
+
     let store = 
-        lazy {
-            // TODO: Replace with code to read from HOCON to get EventStore connection information
-            //let context = !Context.Current
-            //let getEventStore = context.GetComponent<IConnectionManager<IEventStoreConnection>>()
-            //return! match getEventStore with
-            //        | Success eventStore -> 
-            //            url <- eventStore.Url
-            //            eventStore.ConnectAsync()
-            //        | Failure ex -> raise <| Log.errorxr ex "Unable to Initialize EventStore Module (getEventStore)"
-            return Unchecked.defaultof<IEventStoreConnection>
+        defer {
+            let! connectionSettings = settings
+            return EventStoreConnection.create connectionSettings
         }
 
-    let credentials = lazy(
-        // TODO: Replace with code to read from HOCON to get EventStore connection information
-        //let context = !Context.Current
-        //let getCredentials = context.GetComponent<ICredentialManager<UserCredentials>>()
-        //match getCredentials with
-        //| Success credentialManager -> credentialManager.GetCredentials({new IEndpoint with member __.Locator = ""})
-        //| Failure ex -> raise <| Log.errorxr ex "Unable to Initialize EventStore Module (getCredentials)"
-        ConnectionSettings.Default.DefaultUserCredentials
-    )
-
-    let rec private read stream condition from (getEvents: int64 -> Task<StreamEventsSlice>) =
-        asyncSeq {
-            let! eventSlice = getEvents from |> Async.AwaitTask
-            yield eventSlice
-            if eventSlice |> condition
-            then yield! read stream condition eventSlice.NextEventNumber getEvents
-        }
-
-    let private readAllForward stream from =
-        async {
-            let! eventStore = store |> LazyAsync.value
-            return!
-                (fun start -> eventStore.ReadStreamEventsForwardAsync(stream, start, MaxEvents, true, !credentials)) 
-                |> read stream (fun slice -> slice.IsEndOfStream |> not) from
-                |> AsyncSeq.foldAsync mergeSlices EmptySlice
-        }
-
-    let private readAllBackward stream from =
-        async {
-            let! eventStore = store |> LazyAsync.value
-            return!
-                (fun start -> eventStore.ReadStreamEventsBackwardAsync(stream, start, MaxEvents, true, !credentials))
-                |> read stream (fun slice -> slice.IsEndOfStream |> not) from
-                |> AsyncSeq.foldAsync mergeSlices EmptySlice
-        }
-
-    let private readForward stream from limit =
-        async {
-            let! eventStore = store |> LazyAsync.value
-            let terminus = from + limit
-            return!
-                (fun start -> eventStore.ReadStreamEventsForwardAsync(stream, start, Math.Min(MaxEvents, (terminus - start) |> int), true, !credentials)) 
-                |> read stream (fun slice -> slice.IsEndOfStream |> not && slice.NextEventNumber <= terminus) from
-                |> AsyncSeq.foldAsync mergeSlices EmptySlice
-        }
-
-    let private readBackward stream from limit =
-        async {
-            let! eventStore = store |> LazyAsync.value
-            let terminus = from - limit
-            return!
-                (fun start -> eventStore.ReadStreamEventsBackwardAsync(stream, start, Math.Min(MaxEvents, (start - terminus) |> int), true, !credentials)) 
-                |> read stream (fun slice -> slice.IsEndOfStream |> not && slice.NextEventNumber >= terminus) from
-                |> AsyncSeq.foldAsync mergeSlices EmptySlice
-        }
-
-    let readStream stream = function
-    | Forward -> readAllForward stream 0L
-    | ForwardFrom start -> readAllForward stream start
-    | ForwardFor (start,limit) -> readForward stream start limit
-    | Backward -> readAllBackward stream -1L
-    | BackwardFrom start -> readAllBackward stream start
-    | BackwardFor (start,limit) -> readBackward stream start limit
-
-    let readCategory category = readStream (sprintf "$ce-%s" category)
-
-    let readEventType eventType = readStream (sprintf "$et-%s" eventType)
-
-    let readEvent stream position = 
-        async {
-            let! eventStore = store |> LazyAsync.value
-            return! eventStore.ReadEventAsync(stream, position, true, !credentials) |> Async.AwaitTask
-        }
-
-    let checkSubscriptions url stream group = async {
-        try 
-            use client = new HttpClient(BaseAddress = Uri url)
-            let! json = client.GetStringAsync(sprintf "/subscriptions/%s" stream) |> Async.AwaitTask
-            return json |> parseJson<Subscription[]> |> Array.filter (fun subscription -> subscription.GroupName = group)
-        with | _ -> return [||]
-    }
-
-    let subscribe subscription eventHandler =
-        async {
-            let! eventStore = store |> LazyAsync.value
-            match subscription with
-            | Volatile stream ->
-                let! subscription = eventStore.SubscribeToStreamAsync(stream, true, (fun _ event -> event |> eventHandler), userCredentials = !credentials) |> Async.AwaitTask
-                return (fun () -> subscription.Unsubscribe())
-            | CatchUp (stream,startingPosition) ->
-                let defaultSettings = CatchUpSubscriptionSettings.Default
-                let settings = CatchUpSubscriptionSettings(defaultSettings.MaxLiveQueueSize, defaultSettings.ReadBatchSize, false, true)
-                let subscription = eventStore.SubscribeToStreamFrom(stream, startingPosition |> Nullable, settings, (fun _ event -> event |> eventHandler), userCredentials = !credentials)
-                return (fun () -> subscription.Stop())
-            | Persistent (stream,group,startingPosition,autoAcknowledge,strategy) ->
-                let! subscriptions = checkSubscriptions url stream group
-                if subscriptions |> Seq.isEmpty then
-                    let settings = PersistentSubscriptionSettings.Create().ResolveLinkTos().StartFrom(startingPosition).WithNamedConsumerStrategy(strategy)
-                    eventStore.CreatePersistentSubscriptionAsync(stream, group, settings.Build(), !credentials) |> ignore
-                let! subscription = eventStore.ConnectToPersistentSubscriptionAsync(stream, group, (fun _ event ->  event |> eventHandler), userCredentials = !credentials, autoAck = autoAcknowledge) |> Async.AwaitTask
-                return (fun () -> subscription.Stop(TimeSpan.MaxValue))
-        }
-
-    let private getEventData (event: IEventMessage) =
-        let eventData =  event.Body |> toJsonBytes
-        let metadata = {Id = event.Header.MessageId; 
-                        CorrelationId = event.Header.CorrelationId;
-                        AggregateName = event.Header.AggregateName; 
-                        AggregateKey = event.Header.AggregateKey; 
-                        DateTime = event.Header.DateSent; 
-                        AssemblyQualifiedType = event |> getQualifiedTypeName;
-                        Format = Json}                
-        EventData(event.Header.MessageId, event |> getTypeName, true, eventData, metadata |> toJsonBytes)
-
-    let appendEvent stream expectedVersion (event: IEventMessage) =
-        async {
-            let! eventStore = store |> LazyAsync.value
-            return! eventStore.AppendToStreamAsync(stream, expectedVersion, getEventData event) |> Async.AwaitTask
-        }
-
-    let appendEvents stream expectedVersion (events: IEventMessage seq) =
-        async {
-            let! eventStore = store |> LazyAsync.value
-            let eventData = events |> Seq.map getEventData |> Seq.toArray
-            return! eventStore.AppendToStreamAsync(stream, expectedVersion, eventData) |> Async.AwaitTask
-        }
-
-    let appendEventWithMetadata stream expectedVersion (metadata: EventMetadata) (event: IEventMessage) =
-        async {
-            let! eventStore = store |> LazyAsync.value             
-            //Log.debugf "Appending Event %s to Stream %s" (event |> getTypeName) stream
-            let! result = eventStore.AppendToStreamAsync(stream, expectedVersion, EventData(event.Header.MessageId, event |> getTypeName, true, event.Body |> toJsonBytes, metadata |> toJsonBytes)) |> Async.AwaitTask
-            //Log.debugf "Resulting Log Position: %A, Next Expected Version: %d" result.LogPosition result.NextExpectedVersion
-            return ()
-        }
-
-    let getStreams request =
-        async {
-            let! streamFeed = Atom.readFeed "$streams" Forward
-            return
-                match request with
-                | All -> streamFeed.Entries |> Array.Parallel.map (fun entry -> entry.Stream)
-                | Category category ->
-                    streamFeed.Entries
-                    |> Array.filter (fun entry -> entry.Category = category)
-                    |> Array.Parallel.map (fun entry -> entry.Stream)                    
-        }
-
-    let getKeys category =
-        async {
-            let! streams = getStreams <| Category category
-            return streams |> Array.Parallel.map (fun stream ->
-                let index = stream.IndexOf('-')
-                if index >= 0
-                then stream.Substring(index + 1)
-                else stream
-            ) |> Array.distinct
+    let credentials = 
+        defer  {
+            let! connectionSettings = settings
+            return UserCredentials(connectionSettings.UserName, connectionSettings.Password)
         }

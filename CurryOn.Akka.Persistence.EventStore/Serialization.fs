@@ -2,7 +2,7 @@
 
 open Akka.Actor
 open Akka.Serialization
-open Dandh.Common
+open CurryOn.Common
 open EventStore.ClientAPI
 open System
 

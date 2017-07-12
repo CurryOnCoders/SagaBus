@@ -51,8 +51,8 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Plugin.fs" />
     <Compile Include="Serialization.fs" />
+    <Compile Include="Plugin.fs" />
     <Compile Include="Journal.fs" />
     <Compile Include="Query.fs" />
     <None Include="Script.fsx" />
@@ -60,13 +60,19 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Akka">
-      <HintPath>..\packages\Akka.1.2.0\lib\net45\Akka.dll</HintPath>
+      <HintPath>..\packages\Akka.1.2.3\lib\net45\Akka.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence">
-      <HintPath>..\packages\Akka.Persistence.1.2.0.36-beta\lib\net45\Akka.Persistence.dll</HintPath>
+      <HintPath>..\packages\Akka.Persistence.1.2.3.43-beta\lib\net45\Akka.Persistence.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence.FSharp">
       <HintPath>..\packages\Akka.Persistence.FSharp.1.2.0.36-beta\lib\net45\Akka.Persistence.FSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Akka.Persistence.Query">
+      <HintPath>..\packages\Akka.Persistence.Query.1.2.3.43-beta\lib\net45\Akka.Persistence.Query.dll</HintPath>
+    </Reference>
+    <Reference Include="Akka.Streams">
+      <HintPath>..\packages\Akka.Streams.1.2.3\lib\net45\Akka.Streams.dll</HintPath>
     </Reference>
     <Reference Include="EventStore.ClientAPI">
       <HintPath>..\packages\EventStore.Client.4.0.0\lib\net40\EventStore.ClientAPI.dll</HintPath>
@@ -86,6 +92,9 @@
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\packages\Newtonsoft.Json.9.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
+    <Reference Include="Reactive.Streams">
+      <HintPath>..\packages\Reactive.Streams.1.0.2\lib\net45\Reactive.Streams.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Collections.Immutable">
       <HintPath>..\packages\System.Collections.Immutable.1.3.1\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll</HintPath>
@@ -95,6 +104,18 @@
     <Reference Include="System.ValueTuple">
       <HintPath>..\packages\System.ValueTuple.4.3.0\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
     </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CurryOn.Akka.EventStore\CurryOn.Akka.EventStore.fsproj">
+      <Name>CurryOn.Akka.EventStore</Name>
+      <Project>{baddaf18-2620-4a7c-b5f2-6f88d026b8ef}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\CurryOn.Common\CurryOn.Common.fsproj">
+      <Name>CurryOn.Common</Name>
+      <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

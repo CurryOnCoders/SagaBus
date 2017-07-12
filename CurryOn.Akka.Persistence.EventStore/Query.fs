@@ -5,7 +5,7 @@ open Akka.Persistence
 open Akka.Persistence.EventStore
 open Akka.Persistence.Query
 open Akka.Streams.Dsl
-open Dandh.Common
+open CurryOn.Common
 open EventStore.ClientAPI
 open Reactive.Streams
 open System
@@ -17,13 +17,13 @@ type EventStoreReadJournal (system: ExtendedActorSystem) =
     interface IReadJournal
     interface IAllPersistenceIdsQuery with
         member __.AllPersistenceIds () =
-            let eventStore = plugin.Connect() |> Async.RunSynchronously
+            let eventStore = plugin.Connect()
             Source.FromPublisher {new IPublisher<string> with
                                     member __.Subscribe subscriber =
                                         let notify (resolvedEvent: ResolvedEvent) =
                                             if resolvedEvent.Event |> isNotNull
                                             then subscriber.OnNext(resolvedEvent.Event.EventStreamId)
-                                        eventStore.SubscribeToStreamFrom("$streams", 0L |> Nullable, CatchUpSubscriptionSettings.Default, (fun _ event -> notify event), userCredentials = !plugin.Credentials) |> ignore
+                                        eventStore.SubscribeToStreamFrom("$streams", 0L |> Nullable, CatchUpSubscriptionSettings.Default, (fun _ event -> notify event), userCredentials = plugin.Credentials) |> ignore
                                  }
 
 

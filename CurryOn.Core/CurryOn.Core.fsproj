@@ -64,10 +64,10 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Akka">
-      <HintPath>..\Samples\CurryOn.Blog\packages\Akka.1.2.2\lib\net45\Akka.dll</HintPath>
+      <HintPath>..\packages\Akka.1.2.3\lib\net45\Akka.dll</HintPath>
     </Reference>
     <Reference Include="Akka.FSharp">
-      <HintPath>..\Samples\CurryOn.Blog\packages\Akka.FSharp.1.2.2\lib\net45\Akka.FSharp.dll</HintPath>
+      <HintPath>..\packages\Akka.FSharp.1.2.3\lib\net45\Akka.FSharp.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence">
       <HintPath>..\Samples\CurryOn.Blog\packages\Akka.Persistence.1.2.2.40-beta\lib\net45\Akka.Persistence.dll</HintPath>
