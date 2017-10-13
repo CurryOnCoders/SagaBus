@@ -70,7 +70,10 @@
       <HintPath>..\packages\Akka.FSharp.1.2.3\lib\net45\Akka.FSharp.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence">
-      <HintPath>..\Samples\CurryOn.Blog\packages\Akka.Persistence.1.2.2.40-beta\lib\net45\Akka.Persistence.dll</HintPath>
+      <HintPath>..\packages\Akka.Persistence.1.2.3.43-beta\lib\net45\Akka.Persistence.dll</HintPath>
+    </Reference>
+    <Reference Include="Akka.Persistence.FSharp">
+      <HintPath>..\packages\Akka.Persistence.FSharp.1.2.3.43-beta\lib\net45\Akka.Persistence.FSharp.dll</HintPath>
     </Reference>
     <Reference Include="FSharp.Core">
       <HintPath>..\Samples\CurryOn.Blog\packages\FSharp.Core.4.1.17\lib\net45\FSharp.Core.dll</HintPath>

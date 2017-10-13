@@ -1,4 +1,4 @@
-﻿namespace Akka.Persistence.EventStore.Journal
+﻿namespace Akka.Persistence.EventStore
 
 open Akka.Actor
 open Akka.Persistence
@@ -24,16 +24,17 @@ type EventStoreJournal (context: IActorContext) =
     override this.WriteMessagesAsync messages =
         task {
             let tasks = messages 
-                        |> Seq.map (fun message -> (message, plugin.Serialization.Serialize message (message.Payload |> getTypeName |> Some)))
-                        |> Seq.map (fun (message, event) ->
+                        |> Seq.map (fun message ->                         
+                            let eventType = message.Payload |> getTypeName |> Some
+                            let eventMetadata = {Sender = message.Sender; Size = message.Size; Tags = [||]}
+                            let event = plugin.Serialization.Serialize message.Payload eventType eventMetadata
                             let expectedVersion =
                                 let sequenceNumber = message.LowestSequenceNr - 1L
                                 if sequenceNumber = 0L
                                 then ExpectedVersion.NoStream |> int64
                                 else sequenceNumber
                             eventStore.AppendToStreamAsync(message.PersistenceId, expectedVersion, plugin.Credentials, event))
-                        |> Seq.toArray
-            
+                        |> Seq.toArray            
             try 
                 let! results = Task.WhenAll(tasks)
                 return ImmutableList<exn>.Empty :> IImmutableList<exn>
