@@ -1,6 +1,7 @@
 ﻿namespace CurryOn.Akka.EventStore
 
 open Akka.Configuration
+open CurryOn.Common
 open EventStore.ClientAPI
 open System
 open System.Net
@@ -53,8 +54,8 @@ type Settings =
         }
     member settings.ConnectionString = 
         if settings.UseCluster
-        then sprintf "discover://%s:%s@%s:%d" settings.UserName settings.Password settings.ServerName settings.GossipPort
-        else sprintf "tcp://%s:%s@%s:%d" settings.UserName settings.Password settings.ServerName settings.TcpPort
+        then sprintf "ConnectTo=discover://%s:%s@%s:%d;" settings.UserName settings.Password settings.ServerName settings.GossipPort
+        else sprintf "ConnectTo=tcp://%s:%s@%s:%d;" settings.UserName settings.Password settings.ServerName settings.TcpPort
 
  module EventStoreConnection =
     let create (settings: Settings) =
@@ -78,3 +79,10 @@ type Settings =
             |> applySettingIf settings.UseCluster (fun s-> s.SetClusterGossipPort(settings.GossipPort))
 
         EventStoreConnection.Create(settings.ConnectionString, connectionSettings)
+
+    let connect settings =
+        task {
+            let connection = create settings
+            do! connection.ConnectAsync() |> Task.ofUnit
+            return connection
+        }

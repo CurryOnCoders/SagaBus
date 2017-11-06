@@ -4,15 +4,18 @@ open Akka.Actor
 open Akka.Persistence
 open Akka.Streams
 open CurryOn.Akka.EventStore
+open EventStore.ClientAPI.SystemData
 
 type IEventStorePlugin =
     inherit IJournalPlugin
 
 type internal EventStorePlugin (system: ActorSystem) =
-    let settings = Settings(system, system.Settings.Config)
+    let config = system.Settings.Config
+    let settings = config.GetConfig("akka.persistence.journal.event-store") |> Settings.Load
+    let connection = settings |> EventStoreConnection.connect
     new (context: IActorContext) = EventStorePlugin(context.System)    
-    member __.Connect () = EventStore.store.Value
-    member __.Config = system.Settings.Config
+    member __.Connect () = connection
+    member __.Config = config
     member __.Serialization = EventStoreSerialization(system)
     member __.Materializer = ActorMaterializer.Create(system)
-    member __.Credentials = EventStore.credentials.Value
+    member __.Credentials = UserCredentials(settings.UserName, settings.Password)

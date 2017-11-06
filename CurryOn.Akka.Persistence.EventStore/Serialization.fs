@@ -9,6 +9,7 @@ open MBrace.FsPickler
 open MBrace.FsPickler.Json
 open System
 open System.IO
+open System.Reflection
 
 module internal Serialization =
     let private BinarySerializer = BinarySerializer()
@@ -24,7 +25,7 @@ module internal Serialization =
         BinarySerializer.Deserialize<'t>(stream)
 
     let fromBinaryAs =
-        let deserializer = BinarySerializer.GetType().GetMethod("Deserialize")
+        let deserializer = BinarySerializer.GetType().GetMethods(BindingFlags.Public ||| BindingFlags.Instance) |> Seq.find (fun m -> m.Name = "Deserialize")
         fun (bytes: byte[]) (clrType: Type) ->
             use stream = new MemoryStream(bytes)
             let method = deserializer.MakeGenericMethod(clrType)
@@ -51,7 +52,7 @@ module internal Serialization =
         JsonSerializer.Deserialize<'t>(reader)
 
     let parseJsonBytesAs =
-        let deserializer = JsonSerializer.GetType().GetMethod("Deserialize")
+        let deserializer = JsonSerializer.GetType().GetMethods(BindingFlags.Public ||| BindingFlags.Instance) |> Seq.find (fun m -> m.Name = "Deserialize")
         fun (bytes: byte[]) (clrType: Type) ->
             use stream = new MemoryStream(bytes)
             use reader = new StreamReader(stream)
@@ -61,6 +62,7 @@ module internal Serialization =
 [<CLIMutable>]
 type EventMetadata =
     {
+        EventType: string
         Sender: IActorRef
         Tags: string []
         Size: int
@@ -96,9 +98,9 @@ type EventStoreSerialization (serialization: Serialization) =
                 match eventType with
                 | Some eventTypeName -> eventTypeName
                 | None -> data |> getTypeName
-            EventData(Guid.NewGuid(), typeName, false, serializer.ToBinary(data), metadata |> Serialization.toJsonBytes)
+            EventData(Guid.NewGuid(), typeName, true, data |> Serialization.toJsonBytes, metadata |> Serialization.toJsonBytes)
     member __.Deserialize<'a> (event: RecordedEvent) =
         let serializer = serialization.FindSerializerForType typeof<'a>
         match serializer with
         | :? EventStoreSerializer as eventSerializer -> eventSerializer.FromEvent<'a> event
-        | _ -> serializer.FromBinary(event.Data, typeof<'a>) |> unbox<'a>
+        | _ -> event.Data |> Serialization.parseJsonBytes<'a>

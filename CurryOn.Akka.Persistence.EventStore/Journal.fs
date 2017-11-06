@@ -1,6 +1,7 @@
 ﻿namespace Akka.Persistence.EventStore
 
 open Akka.Actor
+open Akka.Configuration
 open Akka.Persistence
 open Akka.Persistence.EventStore
 open Akka.Persistence.Journal
@@ -13,31 +14,38 @@ open System.Collections.Immutable
 open System.Threading
 open System.Threading.Tasks
 
-type EventStoreJournal (context: IActorContext) = 
+type EventStoreJournal (config: Config) = 
     inherit AsyncWriteJournal()
-    let plugin = EventStorePlugin(context)
-    let config = lazy(context.System.Settings.Config.GetConfig("eventstore.persistence.journal"))
-    let writeBatchSize = lazy(config.Value.GetInt("write-batch-size"))
-    let readBatchSize = lazy(config.Value.GetInt("read-batch-size"))
-    let eventStore = plugin.Connect () 
+    let plugin = EventStorePlugin(AsyncWriteJournal.Context)
+    //let config = lazy(context.System.Settings.Config.GetConfig("akka.persistence.journal.event-store"))
+    let writeBatchSize = lazy(config.GetInt("write-batch-size"))
+    let readBatchSize = lazy(config.GetInt("read-batch-size"))
+    let connect () = plugin.Connect () 
 
     override this.WriteMessagesAsync messages =
         task {
+            let! eventStore = connect()
             let tasks = messages 
-                        |> Seq.map (fun message ->                         
-                            let eventType = message.Payload |> getTypeName |> Some
-                            let eventMetadata = {Sender = message.Sender; Size = message.Size; Tags = [||]}
-                            let event = plugin.Serialization.Serialize message.Payload eventType eventMetadata
+                        |> Seq.map (fun message ->
+                            let persistentMessages =  message.Payload |> unbox<IImmutableList<IPersistentRepresentation>> 
+                            let events = persistentMessages |> Seq.map (fun persistentMessage ->
+                                let eventType = persistentMessage.Payload |> getTypeName
+                                let tags = 
+                                    match persistentMessage |> box with
+                                    | :? Tagged as tagged -> tagged.Tags |> Seq.toArray
+                                    | _ -> [||] 
+                                let eventMetadata = {EventType = persistentMessage.Payload |> getFullTypeName; Sender = persistentMessage.Sender; Size = message.Size; Tags = tags}
+                                plugin.Serialization.Serialize persistentMessage.Payload (Some eventType) eventMetadata)
                             let expectedVersion =
                                 let sequenceNumber = message.LowestSequenceNr - 1L
                                 if sequenceNumber = 0L
                                 then ExpectedVersion.NoStream |> int64
                                 else sequenceNumber
-                            eventStore.AppendToStreamAsync(message.PersistenceId, expectedVersion, plugin.Credentials, event))
+                            eventStore.AppendToStreamAsync(message.PersistenceId, expectedVersion, plugin.Credentials, events |> Seq.toArray))
                         |> Seq.toArray            
             try 
                 let! results = Task.WhenAll(tasks)
-                return ImmutableList<exn>.Empty :> IImmutableList<exn>
+                return null
             with | ex ->
                 let errors = [ex]@(tasks |> Array.filter (fun task -> task.IsFaulted) |> Array.map (fun task -> task.Exception) |> Seq.cast<exn> |> Seq.toList)
                 return ImmutableList.CreateRange(errors) :> IImmutableList<exn>
@@ -45,6 +53,7 @@ type EventStoreJournal (context: IActorContext) =
 
     override this.DeleteMessagesToAsync (persistenceId, sequenceNumber) =
         task {
+            let! eventStore = connect()
             let! metadataResult = eventStore.GetStreamMetadataAsync(persistenceId, plugin.Credentials)
             let metadata = metadataResult.StreamMetadata
             let newMetadata = StreamMetadata.Create(metadata.MaxCount, metadata.MaxAge, sequenceNumber |> Nullable, metadata.CacheControl, metadata.Acl)
@@ -53,9 +62,14 @@ type EventStoreJournal (context: IActorContext) =
 
     override this.ReadHighestSequenceNrAsync (persistenceId, from) =
         task {
+            let! eventStore = connect()
             let! eventResult = eventStore.ReadEventAsync(persistenceId, StreamPosition.End |> int64, true, plugin.Credentials)
             match eventResult.Status with
-            | EventReadStatus.Success -> return eventResult.EventNumber
+            | EventReadStatus.Success -> return if eventResult.Event.HasValue
+                                                then if eventResult.Event.Value.Event |> isNotNull
+                                                     then eventResult.Event.Value.Event.EventNumber
+                                                     else eventResult.Event.Value.OriginalEventNumber
+                                                else eventResult.EventNumber
             | EventReadStatus.NotFound ->
                 let! streamMetadata = eventStore.GetStreamMetadataAsync(persistenceId, plugin.Credentials) 
                 return streamMetadata.StreamMetadata.TruncateBefore.GetValueOrDefault()
@@ -64,21 +78,23 @@ type EventStoreJournal (context: IActorContext) =
    
     override this.ReplayMessagesAsync (context, persistenceId, first, last, max, recoveryCallback) =
         task {
-            let eventsToRead = Math.Min(last - first + 1L, max)
+            let! eventStore = connect()
+            let start = first - 1L
+            let eventsToRead = Math.Min(last - start + 1L, max)
             let settings = CatchUpSubscriptionSettings(CatchUpSubscriptionSettings.Default.MaxLiveQueueSize, !readBatchSize, false, true)
             let messagesReplayed = ref 0L
             let toPersistentRepresentation (resolvedEvent: ResolvedEvent) =
-                plugin.Serialization.Deserialize<Persistent> resolvedEvent.Event 
-                :> IPersistentRepresentation
+                let deserializedObject = plugin.Serialization.Deserialize<obj> resolvedEvent.Event 
+                let metadata = resolvedEvent.Event.Metadata |> Serialization.parseJsonBytes<EventMetadata>
+                let persistent = Akka.Persistence.Persistent(deserializedObject, resolvedEvent.Event.EventNumber, resolvedEvent.Event.EventStreamId, metadata.EventType, false, metadata.Sender)
+                persistent :> IPersistentRepresentation
             let sendMessage (subscription: EventStoreCatchUpSubscription) (event: ResolvedEvent) =
                 if event.OriginalEventNumber > last || Interlocked.Increment(messagesReplayed) > max
                 then subscription.Stop()
                 else event |> toPersistentRepresentation |> recoveryCallback.Invoke
-            let liveProcessingStarted = new ManualResetEvent(false)
-            let subscription = eventStore.SubscribeToStreamFrom(persistenceId, first |> Nullable, settings, 
+            let subscription = eventStore.SubscribeToStreamFrom(persistenceId, start |> Nullable, settings, 
                                                                 (fun subscription event -> sendMessage subscription event), 
-                                                                liveProcessingStarted = (fun _ -> liveProcessingStarted.Set() |> ignore), 
                                                                 userCredentials = plugin.Credentials)
-            return liveProcessingStarted.WaitOne()
+            return ()
         } :> Task
     

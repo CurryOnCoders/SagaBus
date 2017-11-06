@@ -114,7 +114,7 @@ module EventStore =
             } 
         }
 
-    let settings = lazy(Settings.Load <| Config.load())
+    let settings = lazy(Settings.Load <| Config.load().GetConfig("akka.persistence.journal.event-store"))
 
     let store = 
         defer {

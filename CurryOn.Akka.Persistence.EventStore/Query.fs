@@ -36,7 +36,7 @@ type EventStoreReadJournal (system: ExtendedActorSystem) =
     interface IReadJournal
     interface IAllPersistenceIdsQuery with
         member __.AllPersistenceIds () =
-            let eventStore = plugin.Connect()
+            let eventStore = plugin.Connect() |> Task.runSynchronously
             Source.FromPublisher 
                 {new IPublisher<string> with
                     member __.Subscribe subscriber =
@@ -47,7 +47,7 @@ type EventStoreReadJournal (system: ExtendedActorSystem) =
                 }
     interface ICurrentEventsByPersistenceIdQuery with
         member __.CurrentEventsByPersistenceId (persistenceId, fromSequence, toSequence) =
-            let eventStore = plugin.Connect()
+            let eventStore = plugin.Connect() |> Task.runSynchronously
             Source.FromPublisher
                 {new IPublisher<EventEnvelope> with
                     member __.Subscribe subscriber =
@@ -63,7 +63,7 @@ type EventStoreReadJournal (system: ExtendedActorSystem) =
                 }
     interface ICurrentEventsByTagQuery with
         member __.CurrentEventsByTag (tag, offset) =
-            let eventStore = plugin.Connect()
+            let eventStore = plugin.Connect() |> Task.runSynchronously
             Source.FromPublisher 
                 {new IPublisher<EventEnvelope> with
                     member __.Subscribe subscriber =
@@ -82,7 +82,7 @@ type EventStoreReadJournal (system: ExtendedActorSystem) =
                 }
     interface ICurrentPersistenceIdsQuery with
         member __.CurrentPersistenceIds () =
-            let eventStore = plugin.Connect()
+            let eventStore = plugin.Connect() |> Task.runSynchronously
             Source.FromPublisher
                 {new IPublisher<string> with
                     member __.Subscribe subscriber =
@@ -94,7 +94,7 @@ type EventStoreReadJournal (system: ExtendedActorSystem) =
                 }
     interface IEventsByPersistenceIdQuery with
         member __.EventsByPersistenceId (persistenceId, fromSequence, toSequence) =
-            let eventStore = plugin.Connect()
+            let eventStore = plugin.Connect() |> Task.runSynchronously
             Source.FromPublisher
                 {new IPublisher<EventEnvelope> with
                     member __.Subscribe subscriber =
@@ -113,7 +113,7 @@ type EventStoreReadJournal (system: ExtendedActorSystem) =
                 }
     interface IEventsByTagQuery with
         member __.EventsByTag (tag, offset) =  
-            let eventStore = plugin.Connect()
+            let eventStore = plugin.Connect() |> Task.runSynchronously
             Source.FromPublisher
                 {new IPublisher<EventEnvelope> with
                     member __.Subscribe subscriber =
