@@ -11,20 +11,13 @@ open Reactive.Streams
 open System
 
 module internal EventJournal =
-    let searchForType = memoize <| fun (typeName: string) ->
-        AppDomain.CurrentDomain.GetAssemblies()
-        |> Seq.collect (fun assembly -> try assembly.GetTypes() with | _ -> [||])
-        |> Seq.find (fun clrType -> 
-            if typeName.Contains(".")
-            then let typeNamespace = typeName.Substring(0, typeName.LastIndexOf('.'))
-                 let name = typeName.Substring(typeName.LastIndexOf('.') + 1)
-                 clrType.Namespace = typeNamespace && clrType.Name = name
-            else clrType.Name = typeName)
+    let searchForType = memoize <| Types.findType        
 
     let getEventType (resolvedEvent: ResolvedEvent) =
         let eventType = resolvedEvent.Event.EventType
-        try Type.GetType(eventType)
-        with | _ -> searchForType eventType
+        match searchForType eventType with
+        | Success clrType -> clrType
+        | Failure ex -> raise ex
 
     let deserialize (serialization: EventStoreSerialization) (eventType: Type) (event: RecordedEvent) =
         let deserializer = serialization.GetType().GetMethod("Deserialize").MakeGenericMethod(eventType)
