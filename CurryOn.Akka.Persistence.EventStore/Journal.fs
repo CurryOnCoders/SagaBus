@@ -17,7 +17,6 @@ open System.Threading.Tasks
 type EventStoreJournal (config: Config) = 
     inherit AsyncWriteJournal()
     let plugin = EventStorePlugin(AsyncWriteJournal.Context)
-    //let config = lazy(context.System.Settings.Config.GetConfig("akka.persistence.journal.event-store"))
     let writeBatchSize = lazy(config.GetInt("write-batch-size"))
     let readBatchSize = lazy(config.GetInt("read-batch-size"))
     let connect () = plugin.Connect () 
@@ -40,7 +39,7 @@ type EventStoreJournal (config: Config) =
                                 let sequenceNumber = message.LowestSequenceNr - 1L
                                 if sequenceNumber = 0L
                                 then ExpectedVersion.NoStream |> int64
-                                else sequenceNumber
+                                else sequenceNumber - 1L
                             eventStore.AppendToStreamAsync(message.PersistenceId, expectedVersion, plugin.Credentials, events |> Seq.toArray))
                         |> Seq.toArray            
             try 

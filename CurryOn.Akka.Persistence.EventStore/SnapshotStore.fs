@@ -21,7 +21,6 @@ type EventStoreSnapshotStore (config: Config) =
     inherit SnapshotStore()
     let context = SnapshotStore.Context
     let plugin = EventStorePlugin(context)
-    //let config = lazy(context.System.Settings.Config.GetConfig("akka.persistence.snapshot-store.event-store"))
     let readBatchSize = lazy(config.GetInt("read-batch-size"))
     let connect () = plugin.Connect()
     let getMetadataStream persistenceId = sprintf "snapshots-%s" persistenceId

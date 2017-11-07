@@ -26,6 +26,7 @@
 open Akka.Actor
 open Akka.FSharp
 open Akka.Persistence
+open Akka.Persistence.EventStore
 open Akka.Persistence.FSharp
 open Akka.Routing
 open CurryOn.Akka.EventStore
@@ -234,8 +235,12 @@ let jim = allEmployees |> List.find (fun e -> e.Name.StartsWith("Jim"))
 employees <! {Id = jim.Id; Salary = 46044.56M}
 
 
-employees <! {Id = Guid.Parse "2dd80dfa-3074-4630-8972-db91c8d1fcd4"; Salary = 46044.56M}
+let readJournal = new EventStoreReadJournal(akka :?> ExtendedActorSystem) 
+let query = (readJournal :> Akka.Persistence.Query.ICurrentPersistenceIdsQuery)
+query.CurrentPersistenceIds().RunForeach((fun id -> printfn "%s" id), Akka.Streams.ActorMaterializer.Create(akka))
 
+let allQuery = (readJournal :> Akka.Persistence.Query.IAllPersistenceIdsQuery)
+allQuery.AllPersistenceIds().RunForeach((fun id -> printf "%s" id), Akka.Streams.ActorMaterializer.Create(akka)) |> Task.runSynchronously
 
 // Cleanup
 let eventStoreTask = Configuration.parse hocon |> (fun config -> config.GetConfig("akka.persistence.journal.event-store")) |> Settings.Load |> EventStoreConnection.connect

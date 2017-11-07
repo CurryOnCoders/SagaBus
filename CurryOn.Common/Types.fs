@@ -4,7 +4,10 @@ open System
 
 module Types =
     let getType name = 
-        try Type.GetType name |> Success
+        try let exactType = Type.GetType name
+            if exactType |> isNotNull
+            then exactType |> Success
+            else Failure <| (exn <| sprintf "The result of Type.GetType(\"%s\") was null" name)
         with | ex -> Failure ex
 
     let findType (name: string) =
