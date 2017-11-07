@@ -1,6 +1,5 @@
 ﻿namespace Akka.Persistence.EventStore
 
-open Akka.FSharp
 open CurryOn.Akka.EventStore
 open CurryOn.Common
 open CurryOn.Core
@@ -11,7 +10,6 @@ open FSharp.Control
 open System
 open System.Net.Http
 open System.Threading.Tasks
-module Config = Akka.FSharp.Configuration
 
 type GetStreamRequest =
 | All
@@ -114,16 +112,3 @@ module EventStore =
             } 
         }
 
-    let settings = lazy(Settings.Load <| Config.load().GetConfig("akka.persistence.journal.event-store"))
-
-    let store = 
-        defer {
-            let! connectionSettings = settings
-            return EventStoreConnection.create connectionSettings
-        }
-
-    let credentials = 
-        defer  {
-            let! connectionSettings = settings
-            return UserCredentials(connectionSettings.UserName, connectionSettings.Password)
-        }

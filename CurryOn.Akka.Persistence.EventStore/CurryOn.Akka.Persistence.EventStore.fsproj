@@ -51,6 +51,7 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Settings.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="Plugin.fs" />
     <Compile Include="Journal.fs" />
@@ -119,11 +120,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CurryOn.Akka.EventStore\CurryOn.Akka.EventStore.fsproj">
-      <Name>CurryOn.Akka.EventStore</Name>
-      <Project>{baddaf18-2620-4a7c-b5f2-6f88d026b8ef}</Project>
-      <Private>True</Private>
-    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Common\CurryOn.Common.fsproj">
       <Name>CurryOn.Common</Name>
       <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>

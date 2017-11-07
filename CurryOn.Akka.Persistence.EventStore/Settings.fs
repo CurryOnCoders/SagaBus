@@ -1,4 +1,4 @@
-﻿namespace CurryOn.Akka.EventStore
+﻿namespace Akka.Persistence.EventStore
 
 open Akka.Configuration
 open CurryOn.Common

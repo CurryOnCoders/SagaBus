@@ -29,7 +29,6 @@ open Akka.Persistence
 open Akka.Persistence.EventStore
 open Akka.Persistence.FSharp
 open Akka.Routing
-open CurryOn.Akka.EventStore
 open CurryOn.Common
 open EventStore.ClientAPI
 open EventStore.ClientAPI.SystemData

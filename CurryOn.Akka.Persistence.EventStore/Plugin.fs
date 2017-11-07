@@ -3,7 +3,6 @@
 open Akka.Actor
 open Akka.Persistence
 open Akka.Streams
-open CurryOn.Akka.EventStore
 open EventStore.ClientAPI.SystemData
 
 type IEventStorePlugin =
