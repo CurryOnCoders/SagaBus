@@ -29,7 +29,7 @@ module internal Serialization =
         fun (bytes: byte[]) (clrType: Type) ->
             use stream = new MemoryStream(bytes)
             let method = deserializer.MakeGenericMethod(clrType)
-            method.Invoke(BinarySerializer, [|stream; null; null; null; false|])
+            method.Invoke(BinarySerializer, [|stream; null; null; null; (Some false)|])
 
     let toJson any = 
         use writer = new StringWriter()
@@ -57,7 +57,7 @@ module internal Serialization =
             use stream = new MemoryStream(bytes)
             use reader = new StreamReader(stream)
             let method = deserializer.MakeGenericMethod(clrType)
-            method.Invoke(JsonSerializer, [|reader; null; null; false|])
+            method.Invoke(JsonSerializer, [|reader; null; null; (Some false)|])
 
 [<CLIMutable>]
 type EventMetadata =

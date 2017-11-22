@@ -73,8 +73,7 @@ type EventStoreSnapshotStore (config: Config) =
                 let snapshotStream = getStream metadata.PersistenceId metadata.SequenceNumber
                 let! snapshotReadResult = eventStore.ReadEventAsync(snapshotStream, StreamPosition.End |> int64, true, userCredentials = plugin.Credentials) 
                 let snapshotEvent = snapshotReadResult.Event.Value
-                let clrType = snapshotEvent |> EventJournal.getEventType
-                return (metadata, Serialization.parseJsonBytesAs snapshotEvent.Event.Data clrType) |> Some
+                return (metadata, Serialization.parseJsonBytes<obj> snapshotEvent.Event.Data) |> Some
             | None -> return None            
         }
 

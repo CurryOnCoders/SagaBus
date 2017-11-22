@@ -9,14 +9,33 @@ open Akka.Streams
 open Akka.Streams.Dsl
 open CurryOn.Common
 open EventStore.ClientAPI
+open Microsoft.VisualStudio.Threading
 open System
 open System.Collections.Immutable
 open System.Threading
 open System.Threading.Tasks
 
+module internal EventJournal =
+    let searchForType = memoize <| Types.findType        
+
+    let getEventType (resolvedEvent: ResolvedEvent) =
+        let eventType = resolvedEvent.Event.EventType
+        match searchForType eventType with
+        | Success clrType -> clrType
+        | Failure ex -> raise ex
+
+    let deserialize (serialization: EventStoreSerialization) (eventType: Type) (event: RecordedEvent) =
+        let deserializer = serialization.GetType().GetMethod("Deserialize").MakeGenericMethod(eventType)
+        deserializer.Invoke(serialization, [|event|])
+
+    let deserializeEvent (serialization: EventStoreSerialization) (resolvedEvent: ResolvedEvent) =
+        let eventType = resolvedEvent |> getEventType
+        resolvedEvent.Event |> deserialize serialization eventType
+
 type EventStoreJournal (config: Config) = 
     inherit AsyncWriteJournal()
-    let plugin = EventStorePlugin(AsyncWriteJournal.Context)
+    let context = AsyncWriteJournal.Context
+    let plugin = EventStorePlugin(context)
     let writeBatchSize = lazy(config.GetInt("write-batch-size"))
     let readBatchSize = lazy(config.GetInt("read-batch-size"))
     let connect () = plugin.Connect () 
@@ -69,6 +88,7 @@ type EventStoreJournal (config: Config) =
                                                      then eventResult.Event.Value.Event.EventNumber
                                                      else eventResult.Event.Value.OriginalEventNumber
                                                 else eventResult.EventNumber
+                                                + 1L
             | EventReadStatus.NotFound ->
                 let! streamMetadata = eventStore.GetStreamMetadataAsync(persistenceId, plugin.Credentials) 
                 return streamMetadata.StreamMetadata.TruncateBefore.GetValueOrDefault()
@@ -78,22 +98,28 @@ type EventStoreJournal (config: Config) =
     override this.ReplayMessagesAsync (context, persistenceId, first, last, max, recoveryCallback) =
         task {
             let! eventStore = connect()
-            let start = first - 1L
+            let stopped = AsyncManualResetEvent(initialState = false)
+            let start = Math.Max(0L, first - 2L)
             let eventsToRead = Math.Min(last - start + 1L, max)
             let settings = CatchUpSubscriptionSettings(CatchUpSubscriptionSettings.Default.MaxLiveQueueSize, !readBatchSize, false, true)
             let messagesReplayed = ref 0L
+            let stop (subscription: EventStoreCatchUpSubscription) =
+                subscription.Stop()
+                stopped.Set()
             let toPersistentRepresentation (resolvedEvent: ResolvedEvent) =
                 let deserializedObject = plugin.Serialization.Deserialize<obj> resolvedEvent.Event 
                 let metadata = resolvedEvent.Event.Metadata |> Serialization.parseJsonBytes<EventMetadata>
-                let persistent = Akka.Persistence.Persistent(deserializedObject, resolvedEvent.Event.EventNumber, resolvedEvent.Event.EventStreamId, metadata.EventType, false, metadata.Sender)
+                let persistent = Akka.Persistence.Persistent(deserializedObject, resolvedEvent.Event.EventNumber + 1L, resolvedEvent.Event.EventStreamId, metadata.EventType, false, metadata.Sender)
                 persistent :> IPersistentRepresentation
-            let sendMessage (subscription: EventStoreCatchUpSubscription) (event: ResolvedEvent) =
-                if event.OriginalEventNumber > last || Interlocked.Increment(messagesReplayed) > max
-                then subscription.Stop()
-                else event |> toPersistentRepresentation |> recoveryCallback.Invoke
+            let sendMessage subscription (event: ResolvedEvent) =
+                try let persistentEvent = event |> toPersistentRepresentation
+                    persistentEvent |> recoveryCallback.Invoke
+                with | ex -> context.System.Log.Error(ex, sprintf "Error Applying Recovered %s Event from EventStore for %s" event.Event.EventType persistenceId)
+                if event.OriginalEventNumber + 1L >= last || Interlocked.Increment(messagesReplayed) > max
+                then stop subscription
             let subscription = eventStore.SubscribeToStreamFrom(persistenceId, start |> Nullable, settings, 
                                                                 (fun subscription event -> sendMessage subscription event), 
                                                                 userCredentials = plugin.Credentials)
-            return ()
+            return! stopped.WaitAsync() |> Task.ofUnit
         } :> Task
     

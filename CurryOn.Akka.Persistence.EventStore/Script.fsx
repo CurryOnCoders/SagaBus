@@ -10,7 +10,7 @@
 #r @"..\packages\Hyperion.0.9.2\lib\net45\Hyperion.dll"
 #r @"..\packages\Akka.Serialization.Hyperion.1.2.3.43-beta\lib\net45\Akka.Serialization.Hyperion.dll"
 #r @"..\packages\Akka.Streams.1.2.3\lib\net45\Akka.Streams.dll"
-#r @"..\packages\EventStore.Client.4.0.0\lib\net40\EventStore.ClientAPI.dll"
+#r @"..\packages\EventStore.Client.4.0.3\lib\net40\EventStore.ClientAPI.dll"
 #r @"..\packages\FsPickler.3.2.0\lib\net45\FsPickler.dll"
 #r @"..\packages\FsPickler.Json.3.2.0\lib\net45\FsPickler.Json.dll"
 #r @"..\packages\Google.ProtocolBuffers.2.4.1.555\lib\net40\Google.ProtocolBuffers.dll"
@@ -19,7 +19,6 @@
 #r @"..\packages\Reactive.Streams.1.0.2\lib\net45\Reactive.Streams.dll"
 #r @"..\packages\System.Collections.Immutable.1.3.1\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll"
 #r @"..\packages\System.ValueTuple.4.3.0\lib\netstandard1.0\System.ValueTuple.dll"
-#r @"../CurryOn.Akka.EventStore/bin/debug/CurryOn.Akka.EventStore.dll"
 #r @"../CurryOn.Common/bin/debug/CurryOn.Common.dll"
 #r @"bin/debug/CurryOn.Akka.Persistence.EventStore.dll"
 
@@ -248,3 +247,11 @@ let credentials = UserCredentials("admin", "changeit")
 eventStore.DeleteStreamAsync("all-employees", ExpectedVersion.Any |> int64, credentials) |> Task.ignoreSynchronously
 eventStore.DeleteStreamAsync("snapshots-all-employees", ExpectedVersion.Any |> int64, credentials) |> Task.ignoreSynchronously
 eventStore.DeleteStreamAsync("snapshot-all-employees-3", ExpectedVersion.Any |> int64, credentials) |> Task.ignoreSynchronously
+
+
+// Test reply 
+let settings = CatchUpSubscriptionSettings(CatchUpSubscriptionSettings.Default.MaxLiveQueueSize, 4095, false, true)
+
+eventStore.SubscribeToStreamFrom("employee-9ff873e4-f991-4f61-9df4-a13986139019", 0L |> Nullable, settings, 
+                                    (fun subscription event -> printfn "%A" event), 
+                                    userCredentials = credentials)
