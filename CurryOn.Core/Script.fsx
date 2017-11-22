@@ -19,7 +19,9 @@ open Akka.Routing
 open CurryOn.Common
 open CurryOn.Core
 open CurryOn.Core.Serialization
+open MBrace.FsPickler
 open MBrace.FsPickler.Json
+open MBrace.FsPickler.Combinators
 open System
 open System.IO
 
@@ -94,3 +96,65 @@ attempt {
     let! deserializedBinary = binary |> deserialize<DomainAggregate> Binary
     return deserializedBinary = aggregateInstance
 }
+
+[<CLIMutable>]
+type MyType =
+    {
+        Name: string
+        Value: int
+        Created: Nullable<DateTime>
+    }
+
+{Name = "Test Object"; Value = 325854; Created = null |> unbox} |> Serialization.toJson
+
+let json = """{
+    "Name": "Test Object",
+    "Value": 325854,
+    "Created": null
+  }"""
+
+
+type IMyInterface = 
+    abstract member Name: string
+    abstract member Value: int
+    abstract member Created: DateTime
+
+let mine =
+    {new IMyInterface with
+        member __.Name = "Test Interface"
+        member __.Value = 385113
+        member __.Created = DateTime.Now
+    }
+    
+
+mine |> Serialization.toJson
+
+let myJson =
+    """{
+         "FsPickler": "2.0.0",
+         "type": "FSI_0014+IMyInterface",
+         "value": {
+           "_flags": "subtype",
+           "subtype": {
+             "Case": "NamedType",
+             "Name": "FSI_0015+mine@123",
+             "Assembly": {
+               "Name": "FSI-ASSEMBLY",
+               "Version": "0.0.0.0",
+               "Culture": "neutral",
+               "PublicKeyToken": ""
+             }
+           },
+           "instance": {}
+         }
+       }"""
+
+let deMine = myJson |> Serialization.parseJson<IMyInterface>
+
+printfn "{Name = %s; Value = %d; Created = %A}" deMine.Name deMine.Value deMine.Created
+
+let myBytes = mine |> Serialization.toJsonBytes
+
+let deByMine = myBytes |> Serialization.parseJsonBytes<IMyInterface>
+
+printfn "{Name = %s; Value = %d; Created = %A}" deByMine.Name deByMine.Value deByMine.Created
