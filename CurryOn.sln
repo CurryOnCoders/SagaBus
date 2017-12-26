@@ -17,6 +17,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.EventStore", "Curry
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.Tests", "CurryOn.Tests\CurryOn.Tests.fsproj", "{80AFB1AD-A933-4EC6-860C-A51A1004FC5C}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.FSharp.Control", "CurryOn.FSharp.Control\CurryOn.FSharp.Control.fsproj", "{B8B2E096-C261-45FC-BFBA-0CEA330D6B04}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +53,10 @@ Global
 		{80AFB1AD-A933-4EC6-860C-A51A1004FC5C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{80AFB1AD-A933-4EC6-860C-A51A1004FC5C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{80AFB1AD-A933-4EC6-860C-A51A1004FC5C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8B2E096-C261-45FC-BFBA-0CEA330D6B04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8B2E096-C261-45FC-BFBA-0CEA330D6B04}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8B2E096-C261-45FC-BFBA-0CEA330D6B04}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8B2E096-C261-45FC-BFBA-0CEA330D6B04}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
