@@ -262,6 +262,15 @@ module Result =
         | Choice1Of2 v -> Success <| Value v
         | Choice2Of2 es -> Failure es
 
+    /// Converts a Task<'a> to a Task<OperationResult<'a,'b>>
+    let inline ofTask<'result,'event> (task: Task<'result>) =
+        task.ContinueWith(fun (t: Task<'result>) -> 
+            if t.IsFaulted
+            then convertExceptionToResult<'result,'event> t.Exception
+            elif t.IsCanceled
+            then convertExceptionToResult <| OperationCanceledException()
+            else t.Result |> success)
+
     /// Categorizes a result based on its state and the presence of extra messages
     let inline (|Pass|Warn|Fail|) result =
       match result with
@@ -300,28 +309,63 @@ and [<Struct>] Operation<'result,'event> =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Operation =
     /// Creates a completed Operation with a successful OperationResult of the given value
-    let success<'result, 'event> : 'result -> Operation<'result,'event> = fun value -> value |> Result.success<'result,'event> |> Completed
+    let inline success<'result, 'event> : 'result -> Operation<'result,'event> = fun value -> value |> Result.success<'result,'event> |> Completed
 
     /// Creates a completed Operation with a successful OperationResult of the given value and events
-    let successWithEvents value events = Completed <| Result.successWithEvents value events
+    let inline successWithEvents value events = Completed <| Result.successWithEvents value events
 
     /// Creates a failed Operation with the given errors in its OperationResult
-    let failure<'result,'event> : 'event list -> Operation<'result,'event> = fun events -> events |> Result.failure<'result,'event> |> Completed
+    let inline failure<'result,'event> : 'event list -> Operation<'result,'event> = fun events -> events |> Result.failure<'result,'event> |> Completed
 
     /// Synchronously returns the operation of a result, waiting for it to complete if necessary
-    let wait operation =
+    let inline wait operation =
         match operation with
         | Completed result -> result
-        | InProcess inProcess -> inProcess.Task.ContinueWith(fun (t: Task<_>) -> 
-            if t.IsFaulted
-            then Result.convertExceptionToResult t.Exception
-            elif t.IsCanceled
-            then Result.convertExceptionToResult <| OperationCanceledException()
-            else t.Result |> Result.success).Result
+        | InProcess inProcess -> Result.ofTask(inProcess.Task).Result
         | Cancelled events -> Failure events
 
+    /// Returns the operation of a result, asynchronously waiting for it to complete if necessary
+    let inline waitAsync operation =
+        async {
+            match operation with
+            | Completed result -> return result
+            | InProcess inProcess ->
+                try
+                    let! result = inProcess.Task |> Async.AwaitTask
+                    return Result.success result
+                with | ex ->
+                    return ex |> Result.convertExceptionToResult
+            | Cancelled events -> return Failure events
+        }
+
+    /// Returns a Task<OperationResult<'result,'event>> representing the result of the operation when it completes
+    let inline waitTask operation = operation |> (waitAsync >> Async.StartAsTask)
+
+    /// Synchronously wait for an Operation to complete
+    let inline complete operation =
+        match operation with
+        | Completed _ as completed -> completed 
+        | InProcess _ as inProcess ->
+            let result = wait inProcess
+            Completed result
+        | Cancelled events -> Completed <| Failure events
+
+    /// Asynchronously wait for an Operation to complete
+    let inline completeAsync operation =
+        async {
+            match operation with
+            | Completed _ as completed -> return completed 
+            | InProcess _ as inProcess ->
+                let! result = waitAsync inProcess
+                return Completed result
+            | Cancelled events -> return Completed <| Failure events
+        }
+
+    /// Returns a Task<Operation<'result,'event>> representing the Completed Operation when it has finished executing
+    let inline completeTask operation = operation |> (completeAsync >> Async.StartAsTask)
+
     /// Merges the given events into the existing operation
-    let mergeEvents operation events =
+    let inline mergeEvents operation events =
         match operation with
         | Completed result -> Completed <| Result.mergeEvents result events
         | InProcess inProcess -> {inProcess with EventsSoFar = (events@inProcess.EventsSoFar)} |> InProcess
@@ -361,3 +405,7 @@ module Operation =
         | InProcess _ as inProcess -> inProcess |> wait
         | Cancelled events -> events |> Failure
         |> Result.returnOrFail 
+
+    /// Converts a System.Exception to an instance of the 'event type and then creates a Completed Failure Operation with that event
+    let inline convertExceptionToResult<'result,'event> (except: exn) =
+        Completed <| Result.convertExceptionToResult<'result,'event> except

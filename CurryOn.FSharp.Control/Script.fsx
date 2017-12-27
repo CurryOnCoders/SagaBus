@@ -73,3 +73,47 @@ let mySeventhOp =
 mySeventhOp |> Operation.wait
 
 mySeventhOp |> Operation.returnOrFail
+
+
+type MyDomainEvents =
+| GenericError
+| NoErrors
+
+let asyncRandom max =
+    async {
+        do! Async.Sleep 1000
+        return rng.Next(1,max)
+    }
+
+let myEighthOp () =
+    operation {
+        let! x = asyncRandom 200
+        if x > 100
+        then return! Failure [exn "Too Large"]
+        else return x
+    }
+
+let myNinthOp () =
+    operation {
+        let! x = asyncRandom 50
+        return! 
+            if x < 25
+            then failwith "Too Small"
+            else Result.successWithEvents x []
+    }
+
+let myTenthOp =
+    operation {
+        let! x = myEighthOp ()
+        let! y = myNinthOp ()
+        return x + y
+    }
+
+myTenthOp |> Operation.complete
+
+myTenthOp |> Operation.completeAsync
+
+let myEleventhOp =
+    operation {
+        failwith "Runtime Error"
+    }

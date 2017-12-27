@@ -23,13 +23,14 @@ module OperationBuilder =
         | Await of Async: AsyncOperation<'result,'event>
         | Return of Operation: OperationResult<'result,'event>
         | ReturnFrom of From: 'result Task
-    /// Implements the machinery of running an `OperationStep<'event, 'result>` as a task returning a continuation task.
+
+    /// Provices the mechanism for running an `OperationStep<'result,'event>` as a task returning a continuation task.
     and OperationStepStateMachine<'result,'event>(firstStep) as this =
         let methodBuilder = AsyncTaskMethodBuilder<'result Task>()
-        let mutable continuation = fun () -> firstStep
+        let continuation = ref <| fun () -> firstStep
         let nextAwaitable() =
             try
-                match continuation() with
+                match continuation.Value() with
                 | Return r ->
                     match r with
                     | Success successfulResult -> methodBuilder.SetResult(Task.FromResult(successfulResult.Result))
@@ -39,7 +40,7 @@ module OperationBuilder =
                     methodBuilder.SetResult(t)
                     None
                 | Await async ->
-                    continuation <- async.Continuation
+                    continuation := async.Continuation
                     Some async.Completion
             with
             | exn ->
@@ -82,67 +83,68 @@ module OperationBuilder =
             | Failure errors -> Return <| Failure errors
         | InProcess inProcess ->
             let awt = inProcess.Task.ConfigureAwait(false).GetAwaiter()
-            if awt.IsCompleted then // Proceed to the next step based on the result we already have.
-                cont(awt.GetResult())
-            else // Await and continue later when a result is available.
-                Await {Completion = awt; Continuation = (fun () -> cont(awt.GetResult()))}
-        | Cancelled events -> Return <| Failure events
+            if awt.IsCompleted 
+            then cont(awt.GetResult())  // Proceed to the next step based on the result we already have.                
+            else Await {Completion = awt; Continuation = (fun () -> cont(awt.GetResult()))} // Await and continue later when a result is available.
+        | Cancelled events -> 
+            Return <| Failure events
 
     type Binder<'result,'event> =
-        static member inline GenericAwait< ^abl, ^awt, ^inp
-                                            when ^abl : (member GetAwaiter : unit -> ^awt)
-                                            and ^awt :> ICriticalNotifyCompletion 
-                                            and ^awt : (member get_IsCompleted : unit -> bool)
-                                            and ^awt : (member GetResult : unit -> ^inp) >
-            (abl : ^abl, continuation : ^inp -> OperationStep<'result,'event>) : OperationStep<'result,'event> =
-                let awt = (^abl : (member GetAwaiter : unit -> ^awt)(abl)) // get an awaiter from the awaitable
-                if (^awt : (member get_IsCompleted : unit -> bool)(awt)) then // shortcut to continue immediately
-                    continuation (^awt : (member GetResult : unit -> ^inp)(awt))
-                else
-                    Await {Completion = awt; Continuation = (fun () -> continuation (^awt : (member GetResult : unit -> ^inp)(awt)))}
+        static member inline private GenericAwait< ^awaitable, ^awaiter, ^input
+                                                    when ^awaitable : (member GetAwaiter: unit -> ^awaiter)
+                                                    and  ^awaiter   :> ICriticalNotifyCompletion 
+                                                    and  ^awaiter   : (member get_IsCompleted: unit -> bool)
+                                                    and  ^awaiter   : (member GetResult: unit -> ^input) >
+            (awaitable: ^awaitable, continuation: ^input -> OperationStep<'result,'event>) : OperationStep<'result,'event> =
+                let awaiter = (^awaitable: (member GetAwaiter: unit -> ^awaiter) (awaitable)) // get an awaiter from the awaitable
+                if (^awaiter: (member get_IsCompleted: unit -> bool) (awaiter)) 
+                then continuation (^awaiter: (member GetResult: unit -> ^input) (awaiter)) // shortcut to continue immediately
+                else Await {Completion = awaiter; Continuation = (fun () -> continuation (^awaiter: (member GetResult: unit -> ^input) (awaiter)))}
 
-        static member inline GenericAwaitNoContext< ^tsk, ^abl, ^awt, ^inp
-                                                        when ^tsk : (member ConfigureAwait : bool -> ^abl)
-                                                        and ^abl : (member GetAwaiter : unit -> ^awt)
-                                                        and ^awt :> ICriticalNotifyCompletion 
-                                                        and ^awt : (member get_IsCompleted : unit -> bool)
-                                                        and ^awt : (member GetResult : unit -> ^inp) >
-            (tsk : ^tsk, continuation : ^inp -> OperationStep<'result,'event>) : OperationStep<'result,'event> =
-                let abl = (^tsk : (member ConfigureAwait : bool -> ^abl)(tsk, false))
-                Binder<'result,'event>.GenericAwait(abl, continuation)
+        static member inline GenericAwaitNoContext< ^taskLike, ^awaitable, ^awaiter, ^input
+                                                     when ^taskLike : (member ConfigureAwait: bool -> ^awaitable)
+                                                     and ^awaitable : (member GetAwaiter: unit -> ^awaiter)
+                                                     and ^awaiter   :> ICriticalNotifyCompletion 
+                                                     and ^awaiter   : (member get_IsCompleted: unit -> bool)
+                                                     and ^awaiter   : (member GetResult: unit -> ^input) >
+            (taskLike: ^taskLike, continuation: ^input -> OperationStep<'result,'event>) : OperationStep<'result,'event> =
+                let awaitable = (^taskLike: (member ConfigureAwait: bool -> ^awaitable) (taskLike, false))
+                Binder<'result,'event>.GenericAwait(awaitable, continuation)
 
-    /// Special case of the above for `Task<'a>`. Have to write this out by hand to avoid confusing the compiler
+        static member inline GenericAwaitCaptureContext (awaitable, continuation) = 
+            Binder<'result,'event>.GenericAwait(awaitable, continuation)
+
+    /// Special binding for Task<'a> that captures the current context for running the continuation. 
+    /// Have to write this out by hand to avoid confusing the compiler
     /// trying to decide between satisfying the constraints with `Task` or `Task<'a>`.
-    let inline bindTask (task : 'a Task) (continuation : 'a -> OperationStep<'b,'event>) =
-        let awt = task.GetAwaiter()
-        if awt.IsCompleted then // Proceed to the next step based on the result we already have.
-            let result = awt.GetResult()
-            continuation result
-        else // Await and continue later when a result is available.
-            Await {Completion = awt; Continuation = (fun () -> 
-                let result = awt.GetResult()
-                continuation result)}
+    let inline bindTaskCaptureContext (task : 'a Task) (continuation : 'a -> OperationStep<'b,'event>) =
+        let awaiter = task.GetAwaiter()
+        if awaiter.IsCompleted 
+        then let result = awaiter.GetResult()
+             continuation result  // Proceed to the next step based on the result we already have.
+        else Await {Completion = awaiter; Continuation = (fun () -> // Await and continue later when a result is available.
+                let result = awaiter.GetResult() 
+                continuation result)}  
 
-    /// Special case of the above for `Task<'a>`, for the context-insensitive builder.
+    /// Special binding for Task<'a> without capturing the context.
     /// Have to write this out by hand to avoid confusing the compiler thinking our built-in bind method
     /// defined on the builder has fancy generic constraints on inp and out parameters.
-    let inline bindTaskConfigureFalse (task : 'a Task) (continuation : 'a -> OperationStep<'b,'event>) =
-        let awt = task.ConfigureAwait(false).GetAwaiter()
-        if awt.IsCompleted then // Proceed to the next step based on the result we already have.
-            let result = awt.GetResult()
-            continuation result
-        else // Await and continue later when a result is available.
-            Await {Completion = awt; Continuation = (fun () -> 
-                let result = awt.GetResult()
+    let inline bindTaskNoContext (task : 'a Task) (continuation : 'a -> OperationStep<'b,'event>) =
+        let awaiter = task.ConfigureAwait(false).GetAwaiter()
+        if awaiter.IsCompleted 
+        then let result = awaiter.GetResult() 
+             continuation result // Proceed to the next step based on the result we already have.
+        else Await {Completion = awaiter; Continuation = (fun () ->  // Await and continue later when a result is available.
+                let result = awaiter.GetResult()
                 continuation result)}
 
-    /// Special case for binding F# Async<'a> without having to always call Async.StartAsTask
+    /// Special case for binding F# Async<'a> without having to always call Async.StartAsTask in the Operation computation
     let inline bindAsync (asyncVal: 'a Async) (continuation: 'a -> OperationStep<'b, 'event>) =
-        bindTaskConfigureFalse (asyncVal |> Async.StartAsTask) continuation
+        bindTaskNoContext (asyncVal |> Async.StartAsTask) continuation
 
     /// Chains together a step with its following step.
     /// Note that this requires that the first step has no result.
-    /// This prevents constructs like `task { return 1; return 2; }`.
+    /// This prevents constructs like `operation { return 1; return 2; }`.
     let rec combine (step : OperationStep<unit,'event>) (continuation : unit -> OperationStep<'result,'event>) =
         match step with
         | Return _ -> continuation()
@@ -153,9 +155,8 @@ module OperationBuilder =
 
     /// Builds a step that executes the body while the condition predicate is true.
     let whileLoop (cond : unit -> bool) (body : unit -> OperationStep<unit,'event>) =
-        if cond() then
-            // Create a self-referencing closure to test whether to repeat the loop on future iterations.
-            let rec repeat () =
+        if cond()  
+        then let rec repeat () = // Create a self-referencing closure to test whether to repeat the loop on future iterations.
                 if cond() then
                     let body = body()
                     match body with
@@ -163,37 +164,32 @@ module OperationBuilder =
                     | ReturnFrom t -> Await {Completion = t.GetAwaiter(); Continuation = repeat}
                     | Await async -> Await {async with Continuation = (fun () -> combine (async.Continuation()) repeat)}
                 else zero ()
-            // Run the body the first time and chain it to the repeat logic.
-            combine (body()) repeat
+             // Run the body the first time and chain it to the repeat logic.
+             combine (body()) repeat
         else zero ()
 
     /// Wraps a step in a try/with. This catches exceptions both in the evaluation of the function
     /// to retrieve the step, and in the continuation of the step (if any).
     let rec tryWith(step : unit -> OperationStep<'result,'event>) (catch : exn -> OperationStep<'result,'event>) =
-        try
-            match step() with
+        try match step() with
             | Return _ as i -> i
             | ReturnFrom t ->
                 let awaitable = t.GetAwaiter()
                 Await {Completion = awaitable; Continuation = (fun () ->
-                    try
-                        awaitable.GetResult() |> Result.success |> Return
-                    with
-                    | exn -> catch exn)}
+                    try awaitable.GetResult() |> Result.success |> Return
+                    with | exn -> catch exn)}
             | Await async -> Await {async with Continuation = (fun () -> tryWith async.Continuation catch)}
-        with
-        | exn -> catch exn
+        with | exn -> catch exn
 
     /// Wraps a step in a try/finally. This catches exceptions both in the evaluation of the function
     /// to retrieve the step, and in the continuation of the step (if any).
     let rec tryFinally (step : unit -> OperationStep<'result,'event>) fin =
         let step =
-            try step()
             // Important point: we use a try/with, not a try/finally, to implement tryFinally.
             // The reason for this is that if we're just building a continuation, we definitely *shouldn't*
             // execute the `fin()` part yet -- the actual execution of the asynchronous code hasn't completed!
-            with
-            | _ ->
+            try step()            
+            with | _ ->
                 fin()
                 reraise()
         match step with
@@ -203,10 +199,8 @@ module OperationBuilder =
         | ReturnFrom t ->
             let awaitable = t.GetAwaiter()
             Await {Completion = awaitable; Continuation = (fun () ->
-                    try
-                        awaitable.GetResult() |> Result.success |> Return
-                    with
-                    | _ ->
+                    try awaitable.GetResult() |> Result.success |> Return
+                    with | _ ->
                         fin()
                         reraise())}
         | Await async ->
@@ -226,18 +220,18 @@ module OperationBuilder =
             // ... and its body is a while loop that advances the enumerator and runs the body on each element.
             (fun e -> whileLoop e.MoveNext (fun () -> body e.Current))
 
-    /// Runs a step as a task -- with a short-circuit for immediately completed steps.
-    let run (firstStep : unit -> OperationStep<'result,exn>) =
+    /// Runs an OperationStep as a task -- with a short-circuit for immediately completed steps.
+    let runEx (firstStep : unit -> OperationStep<'result,exn>) =
         try
             match firstStep() with
             | Return x -> Completed x
             | ReturnFrom t -> InProcess { Task = t; EventsSoFar = [] }
             | Await _ as step -> InProcess { Task = OperationStepStateMachine<'result,exn>(step).Run().Unwrap(); EventsSoFar = [] } // sadly can't do tail recursion
-        // Any exceptions should go on the task, rather than being thrown from this call.
-        // This matches C# behavior where you won't see an exception until awaiting the task,
+        // Any exceptions should become a Completed Failure Operation, rather than being thrown from this call.
+        // This matches C# Task Async behavior where you won't see an exception until awaiting the task,
         // even if it failed before reaching the first "await".
-        with | exn ->
-            Completed <| Failure [exn]
+        with | ex ->
+            Completed <| Failure [ex]
 
     type UnitTask =
         struct
@@ -249,11 +243,13 @@ module OperationBuilder =
 
     type OperationBuilder() =
         member inline __.Delay(f : unit -> OperationStep<_,_>) = f
-        member inline __.Run(f : unit -> OperationStep<'result,exn>) = run f
+        member inline __.Run(f : unit -> OperationStep<'result,exn>) = runEx f
         member inline __.Zero() = zero ()
         member inline __.Return(x) = retEx x
         member inline __.Return(s: SuccessfulResult<_,_>) = ret s
+        member inline __.ReturnFrom(f: OperationResult<_,_>) = Return f
         member inline __.ReturnFrom(task : _ Task) = ReturnFrom task
+        member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = Return <| Success s
         member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
         member inline __.While(condition : unit -> bool, body : unit -> OperationStep<unit,'event>) = whileLoop condition body
         member inline __.For(sequence : _ seq, body : _ -> OperationStep<unit,'event>) = forLoop sequence body
@@ -261,7 +257,7 @@ module OperationBuilder =
         member inline __.TryFinally(body : unit -> OperationStep<_,_>, fin : unit -> unit) = tryFinally body fin
         member inline __.Using(disp : #IDisposable, body : #IDisposable -> OperationStep<_,_>) = using disp body
         member inline __.Bind(task : 'a Task, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindTaskConfigureFalse task continuation
+            bindTaskNoContext task continuation
         member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
             bind op continuation
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
@@ -282,9 +278,9 @@ module ContextInsensitive =
     // This is how we support binding arbitrary task-like types.
     type OperationBuilder.OperationBuilder with
         member inline this.ReturnFrom(taskLike) =
-            OperationBuilder.Binder<_,_>.GenericAwait(taskLike, OperationBuilder.ret)
+            OperationBuilder.Binder<_,_>.GenericAwaitCaptureContext(taskLike, OperationBuilder.ret)
         member inline this.Bind(taskLike, continuation : _ -> OperationBuilder.OperationStep<'result,'event>) : OperationBuilder.OperationStep<'result,'event> =
-            OperationBuilder.Binder<'result,'event>.GenericAwait(taskLike, continuation)
+            OperationBuilder.Binder<'result,'event>.GenericAwaitCaptureContext(taskLike, continuation)
     
     [<AutoOpen>]
     module HigherPriorityBinds =
