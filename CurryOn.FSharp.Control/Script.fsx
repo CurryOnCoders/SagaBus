@@ -74,11 +74,6 @@ mySeventhOp |> Operation.wait
 
 mySeventhOp |> Operation.returnOrFail
 
-
-type MyDomainEvents =
-| GenericError
-| NoErrors
-
 let asyncRandom max =
     async {
         do! Async.Sleep 1000
@@ -113,9 +108,17 @@ myTenthOp |> Operation.complete
 
 myTenthOp |> Operation.completeAsync
 
-let myEleventhOp =
+let myEleventhOp () =
     operation {
         failwith "Runtime Error"
+    }
+
+let myTwelvthOp =
+    operation {
+        try do! myEleventhOp ()
+            return 3
+        with | ex ->
+            return ex.Message.Length
     }
 
 let myLazyOp () =
@@ -147,3 +150,37 @@ let myComposedOp =
     }
 
 myComposedOp |> Operation.returnOrFail
+
+let myLazyLazyOp =
+    lazy_operation {
+        return! myLazyOp()
+    }
+
+myLazyLazyOp |> Operation.wait
+
+
+
+type MyDomainEvents =
+| GenericError
+| NoErrors
+
+let myFirstDomainOp () =
+    operation {
+        let x = 3
+        let y = 5
+        return! Result.successWithEvents (x + y) [NoErrors]
+    }
+
+let mySecondDomainOp () = 
+    operation {
+        let! x = myFirstDomainOp()
+        return x
+    }
+
+
+let myLazyDomainOp =
+    lazy_operation {
+        let! x = myFirstDomainOp ()
+        let! y = myLazyLazyOp
+        return Result.success x + y
+    }
