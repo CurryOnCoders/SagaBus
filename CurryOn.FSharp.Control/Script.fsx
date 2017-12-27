@@ -117,3 +117,33 @@ let myEleventhOp =
     operation {
         failwith "Runtime Error"
     }
+
+let myLazyOp () =
+    lazy_operation {
+        let x = rng.Next(1,10)
+        let! y = asyncRandom(10)
+        let z = x + y
+        return if z > 10
+               then failwithf "Over Limit: %d" z
+               else z
+    }
+
+let myLazyOpRun = myLazyOp()
+
+match myLazyOpRun with
+| Deferred deferred -> deferred.Evaluated |> Event.add (fun value -> printfn "Evaluated %O" value)
+| _ -> ()
+
+myLazyOpRun |> Operation.returnOrFail
+
+let myComposedOp =
+    operation {
+        let! x = asyncRandom(10)
+        let! y = myLazyOpRun
+        let z = x + y
+        return if z > 20
+               then failwithf "Over Combined Limit: %d" z
+               else z
+    }
+
+myComposedOp |> Operation.returnOrFail

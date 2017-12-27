@@ -294,17 +294,37 @@ type InProcessOperation<'result,'event> =
         EventsSoFar: 'event list
     }
 
+/// Helper type for creating Lazy values that raise an event when they are evaluated
+type EventingLazy<'a> (lazyValue: 'a Lazy) =
+    let evaluated = Event<'a>()
+    member __.Evaluated = evaluated.Publish
+    member __.IsValueCreated = lazyValue.IsValueCreated
+    member __.Value 
+        with get () =
+            if lazyValue.IsValueCreated
+            then lazyValue.Value
+            else try lazyValue.Force()
+                 finally evaluated.Trigger lazyValue.Value             
+
 /// Represents an Operation composed of one or more steps,
-/// which may be already completed, in-process, or cancelled
+/// which may be already completed, in-process, deferred, or cancelled
 and [<Struct>] Operation<'result,'event> =
     | Completed of Result: OperationResult<'result,'event>
     | InProcess of IncompleteOperation: InProcessOperation<'result,'event>
+    | Deferred of Lazy: EventingLazy<Operation<'result,'event>>
     | Cancelled of EventsSoFar: 'event list
     member this.Events =
         match this with
         | Completed result -> result.Events
         | InProcess inProcess -> inProcess.EventsSoFar
+        | Deferred deferred -> deferred.Value.Events
         | Cancelled events -> events
+    override this.ToString () =
+        match this with
+        | Completed result -> sprintf "Operation Completed: %O" result
+        | InProcess inProcess -> sprintf "Operation In Process: %A" inProcess.EventsSoFar
+        | Deferred deferred -> sprintf "Operation Deferred: %A" deferred
+        | Cancelled events -> sprintf "Operation Cancelled: %A" events
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Operation =
@@ -317,15 +337,19 @@ module Operation =
     /// Creates a failed Operation with the given errors in its OperationResult
     let inline failure<'result,'event> : 'event list -> Operation<'result,'event> = fun events -> events |> Result.failure<'result,'event> |> Completed
 
+    /// Creates a Deffered Operation from a Lazy<Operation<'result,'event>>
+    let inline defer lazyValue = lazyValue |> EventingLazy |> Deferred
+
     /// Synchronously returns the operation of a result, waiting for it to complete if necessary
-    let inline wait operation =
+    let rec wait operation =
         match operation with
         | Completed result -> result
         | InProcess inProcess -> Result.ofTask(inProcess.Task).Result
+        | Deferred deferred -> wait deferred.Value
         | Cancelled events -> Failure events
 
     /// Returns the operation of a result, asynchronously waiting for it to complete if necessary
-    let inline waitAsync operation =
+    let rec waitAsync operation =
         async {
             match operation with
             | Completed result -> return result
@@ -335,6 +359,7 @@ module Operation =
                     return Result.success result
                 with | ex ->
                     return ex |> Result.convertExceptionToResult
+            | Deferred deferred -> return! waitAsync deferred.Value
             | Cancelled events -> return Failure events
         }
 
@@ -342,22 +367,24 @@ module Operation =
     let inline waitTask operation = operation |> (waitAsync >> Async.StartAsTask)
 
     /// Synchronously wait for an Operation to complete
-    let inline complete operation =
+    let rec complete operation =
         match operation with
         | Completed _ as completed -> completed 
         | InProcess _ as inProcess ->
             let result = wait inProcess
             Completed result
+        | Deferred deferred -> complete deferred.Value
         | Cancelled events -> Completed <| Failure events
 
     /// Asynchronously wait for an Operation to complete
-    let inline completeAsync operation =
+    let rec completeAsync operation =
         async {
             match operation with
             | Completed _ as completed -> return completed 
             | InProcess _ as inProcess ->
                 let! result = waitAsync inProcess
                 return Completed result
+            | Deferred deferred -> return! completeAsync deferred.Value
             | Cancelled events -> return Completed <| Failure events
         }
 
@@ -365,21 +392,23 @@ module Operation =
     let inline completeTask operation = operation |> (completeAsync >> Async.StartAsTask)
 
     /// Merges the given events into the existing operation
-    let inline mergeEvents operation events =
+    let rec mergeEvents operation events =
         match operation with
         | Completed result -> Completed <| Result.mergeEvents result events
         | InProcess inProcess -> {inProcess with EventsSoFar = (events@inProcess.EventsSoFar)} |> InProcess
+        | Deferred deferred -> lazy(mergeEvents deferred.Value events) |> defer
         | Cancelled eventsSoFar -> events @ eventsSoFar |> Cancelled
 
     /// Executes the given function and returns a completed Operation with either a SuccessfulResult or the thrown exception in a Failure
     let inline catch f x = try success (f x) with | ex -> failure [ex]
 
     /// Returns true if the Operation failed (not successful or cancelled)
-    /// If the Operation is InProcess, it is waited on synchronously, then the same logic will apply
+    /// If the Operation is InProcess or Deferred, it is waited on synchronously, then the same logic will apply
     let inline failed operation = 
         match operation with
         | Completed result -> Result.failed result       
         | InProcess _ as inProcess -> inProcess |> wait |> Result.failed
+        | Deferred _ as deferred -> deferred |> wait |> Result.failed
         | _ -> false
 
     /// Returns true if the Operation was cancelled (not successful, failure, or in process)
@@ -388,21 +417,30 @@ module Operation =
         | Cancelled _ -> true
         | _ -> false
 
+    /// Returns true if the Operation is deferred for lazy evaluation
+    let inline deferred operation =
+        match operation with
+        | Deferred _ -> true
+        | _ -> false
+
     /// Returns true if the Operation was succesful (not failure or cancelled)
-    /// If the Operation is InProcess, it is waited on synchronously, then the same logic will apply
+    /// If the Operation is InProcess or Deferred, it is waited on synchronously, then the same logic will apply
     let inline ok operation =
         match operation with
         | Completed result -> Result.ok result
         | InProcess _ as inProcess -> inProcess |> wait |> Result.ok
+        | Deferred _ as deferred -> deferred |> wait |> Result.ok
         | _ -> false
 
     /// If the given Operation is Completed and a Success the wrapped value will be returned. 
-    /// If the given Operation is InProcess, the Operation will be waited on synchronously, then the same logic will apply
+    /// If the given Operation is InProcess or Deferred, the Operation will be waited on synchronously, 
+    /// then the same logic will be applied to the Completed Operation,
     /// Otherwise the function throws an exception with the Failure or Cancellation events of the result.
     let inline returnOrFail operation = 
         match operation with
         | Completed result -> result
         | InProcess _ as inProcess -> inProcess |> wait
+        | Deferred _ as deferred -> deferred |> wait
         | Cancelled events -> events |> Failure
         |> Result.returnOrFail 
 
