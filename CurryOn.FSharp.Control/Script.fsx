@@ -54,6 +54,8 @@ let mySixthOp =
 
 mySixthOp |> Operation.wait
 
+mySixthOp |> Operation.returnOrFail
+
 let myAsync =
     async {
         let next = rng.Next()
@@ -69,3 +71,5 @@ let mySeventhOp =
     }
 
 mySeventhOp |> Operation.wait
+
+mySeventhOp |> Operation.returnOrFail

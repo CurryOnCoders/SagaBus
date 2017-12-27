@@ -6,7 +6,7 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Threading.Tasks
 
-/// Represents the successful of an operation that also yields events,
+/// Represents the successful result of an Operation that also yields events
 /// such as warnings, informational messages, or other domain events
 [<Struct>]
 type SuccessfulResultWithEvents<'result,'event> =
@@ -15,7 +15,7 @@ type SuccessfulResultWithEvents<'result,'event> =
         Events: 'event list
     }
 
-/// Represents the successful result of a computation,
+/// Represents the successful result of an Operation,
 /// which can be either a value or a value with a list of events
 [<Struct>]
 type SuccessfulResult<'result,'event> =
@@ -36,6 +36,22 @@ type SuccessfulResult<'result,'event> =
 type OperationResult<'result,'event> =
     | Success of Result: SuccessfulResult<'result,'event>
     | Failure of ErrorList: 'event list
+     /// Creates a Failure result with the given events.
+    static member FailWith(events: 'event seq) : OperationResult<'result, 'event> = 
+        OperationResult<'result, 'event>.Failure(events |> Seq.toList)
+    /// Creates a Failure result with the given event.
+    static member FailWith(event: 'event) : OperationResult<'result, 'event> = 
+        OperationResult<'result, 'event>.Failure([event])    
+    /// Creates a Successful result with the given value.
+    static member Succeed(value: 'result) : OperationResult<'result, 'event> =         
+        OperationResult<'result, 'event>.Success(Value value)
+    /// Creates a Successful result with the given value and the given event.
+    static member Succeed(value: 'result, event: 'event) : OperationResult<'result, 'event> = 
+        OperationResult<'result, 'event>.Success(WithEvents {Value = value; Events = [event]})
+    /// Creates a Successful result with the given value and the given events.
+    static member Succeed(value:'result, events: 'event seq) : OperationResult<'result, 'event> = 
+        OperationResult<'result, 'event>.Success(WithEvents {Value = value; Events = events |> Seq.toList})
+    /// The list of events for the Operation Result, whether success or failure
     member this.Events =
         match this with
         | Success successfulResult -> successfulResult.Events
@@ -117,6 +133,150 @@ module Result =
         | Failure errorEvents ->
             failure (events@errorEvents)
 
+    /// Returns true if the OperationResult was not successful.
+    let inline failed result = 
+        match result with
+        | Failure _ -> true
+        | _ -> false
+
+    /// Returns true if the OperationResult was succesful.
+    let inline ok result =
+        match result with
+        | Success _ -> true
+        | _ -> false
+
+    /// Takes an OperationResult and maps it with fSuccess if it is a Success otherwise it maps it with fFailure.
+    let inline either fSuccess fFailure operationResult = 
+        match operationResult with
+        | Success successfulResult -> 
+            match successfulResult with
+            | Value value -> fSuccess (value, [])
+            | WithEvents withEvents -> fSuccess (withEvents.Value, withEvents.Events)
+        | Failure events -> fFailure events
+
+    /// If the given OperationResult is a Success the wrapped value will be returned. 
+    /// Otherwise the function throws an exception with the Failure message of the result.
+    let inline returnOrFail result = 
+        let inline raiseExn events = 
+            events
+            |> Seq.map (sprintf "%O")
+            |> String.concat (sprintf "%s\t" Environment.NewLine)
+            |> failwith
+        either fst raiseExn result
+
+    /// If the OperationResult is a Success it executes the given function on the value.
+    /// Otherwise the exisiting failure is propagated.
+    let inline bind f result = 
+        let inline fSuccess (x, events) = mergeEvents (f x) events
+        let inline fFailure (events) = Failure events
+        either fSuccess fFailure result
+
+    /// Flattens a nested OperationResult given the Failure types are equal
+    let inline flatten (result : OperationResult<OperationResult<_,_>,_>) =
+        result |> bind id
+
+    /// If the OperationResult is a Success it executes the given function on the value. 
+    /// Otherwise the exisiting failure is propagated.
+    /// This is the infix operator version of the bind function
+    let inline (>>=) result f = bind f result
+
+    /// If the wrapped function is a success and the given result is a success the function is applied on the value. 
+    /// Otherwise the exisiting error events are propagated.
+    let inline apply wrappedFunction result = 
+        match wrappedFunction, result with
+        | Success successfulResult1, Success successfulResult2 -> Success(WithEvents {Value = successfulResult1.Result successfulResult2.Result; Events = successfulResult1.Events @ successfulResult2.Events})
+        | Failure errors, Success _ -> Failure errors
+        | Success _, Failure errors -> Failure errors
+        | Failure errors1, Failure errors2 -> Failure <| errors1 @ errors2
+
+    /// If the wrapped function is a success and the given result is a success the function is applied on the value. 
+    /// Otherwise the exisiting error messages are propagated.
+    /// This is the infix operator version of the apply function
+    let inline (<*>) wrappedFunction result = apply wrappedFunction result
+
+    /// Lifts a function into an OperationResult container and applies it on the given result.
+    let inline lift f result = apply (Success <| Value f) result
+
+    /// Maps a function over the existing error events in case of failure. In case of success, the message type will be changed and warnings will be discarded.
+    let inline mapFailure f result =
+        match result with
+        | Success successfulResult -> Success (Value successfulResult.Result)
+        | Failure errors -> Failure <| f errors
+
+    /// Lifts a function into a Result and applies it on the given result.
+    /// This is the infix operator version of the lift function
+    let inline (<!>) f result = lift f result
+
+    /// Promote a function to a monad/applicative, scanning the monadic/applicative arguments from left to right.
+    let inline lift2 f a b = f <!> a <*> b
+
+    /// If the OperationResult is a Success it executes the given success function on the value and the events.
+    /// If the OperationResult is a Failure it executes the given failure function on the events.
+    /// Result is propagated unchanged.
+    let inline eitherTee fSuccess fFailure result =
+        let inline tee f x = f x; x;
+        tee (either fSuccess fFailure) result
+
+    /// If the OperationResult is a Success it executes the given function on the value and the events.
+    /// Result is propagated unchanged.
+    let inline successTee f result = 
+        eitherTee f ignore result
+
+    /// If the OperationResult is a Failure it executes the given function on the events.
+    /// Result is propagated unchanged.
+    let inline failureTee f result = 
+        eitherTee ignore f result
+
+    /// Collects a sequence of OperationResults and accumulates their values.
+    /// If the sequence contains an error the error will be propagated.
+    let inline collect xs = 
+        Seq.fold (fun result next -> 
+            match result, next with
+            | Success sr1, Success sr2 -> Success <| WithEvents {Value = sr2.Result :: sr1.Result; Events = sr1.Events @ sr2.Events}
+            | Success sr1, Failure events2 -> Failure <| sr1.Events @ events2
+            | Failure events1, Success sr2 -> Failure <| events1 @ sr2.Events
+            | Failure events1, Failure events2 -> Failure (events1 @ events2)) (Success <| Value []) xs
+        |> lift List.rev
+
+    /// Converts an option into an OperationResult, using the provided events if None.
+    let inline ofOptionWithEvents opt noneEvents = 
+        match opt with
+        | Some x -> Success <| Value x
+        | None -> Failure noneEvents
+
+    /// Converts an option into an OperationResult, using the provided event if None.
+    let inline ofOptionWithEvent opt noneEvent = ofOptionWithEvents opt [noneEvent]
+
+    /// Converts an option into an OperationResult.
+    let inline ofOption opt = ofOptionWithEvents opt []
+
+    /// Converts a Choice into an OperationResult.
+    let inline ofChoice choice =
+        match choice with
+        | Choice1Of2 v -> Success <| Value v
+        | Choice2Of2 e -> Failure [e]
+
+    /// Converts a Choice with a List of Events in Choice2of2 into an OperationResult.
+    let inline ofChoiceWithEvents choice =
+        match choice with
+        | Choice1Of2 v -> Success <| Value v
+        | Choice2Of2 es -> Failure es
+
+    /// Categorizes a result based on its state and the presence of extra messages
+    let inline (|Pass|Warn|Fail|) result =
+      match result with
+      | Success successfulResult -> 
+        match successfulResult with
+        | Value value -> Pass value
+        | WithEvents withEvents -> Warn (withEvents.Value, withEvents.Events)
+      | Failure events -> Fail events
+
+    /// Treat a succeessful result with warning events as a failure
+    let inline failOnWarnings result =
+      match result with
+      | Warn (_,warnings) -> Failure warnings
+      | _  -> result 
+
 /// Represents an incomplete operation that is currently executing
 [<Struct>]
 type InProcessOperation<'result,'event> = 
@@ -166,3 +326,38 @@ module Operation =
         | Completed result -> Completed <| Result.mergeEvents result events
         | InProcess inProcess -> {inProcess with EventsSoFar = (events@inProcess.EventsSoFar)} |> InProcess
         | Cancelled eventsSoFar -> events @ eventsSoFar |> Cancelled
+
+    /// Executes the given function and returns a completed Operation with either a SuccessfulResult or the thrown exception in a Failure
+    let inline catch f x = try success (f x) with | ex -> failure [ex]
+
+    /// Returns true if the Operation failed (not successful or cancelled)
+    /// If the Operation is InProcess, it is waited on synchronously, then the same logic will apply
+    let inline failed operation = 
+        match operation with
+        | Completed result -> Result.failed result       
+        | InProcess _ as inProcess -> inProcess |> wait |> Result.failed
+        | _ -> false
+
+    /// Returns true if the Operation was cancelled (not successful, failure, or in process)
+    let inline cancelled operation = 
+        match operation with
+        | Cancelled _ -> true
+        | _ -> false
+
+    /// Returns true if the Operation was succesful (not failure or cancelled)
+    /// If the Operation is InProcess, it is waited on synchronously, then the same logic will apply
+    let inline ok operation =
+        match operation with
+        | Completed result -> Result.ok result
+        | InProcess _ as inProcess -> inProcess |> wait |> Result.ok
+        | _ -> false
+
+    /// If the given Operation is Completed and a Success the wrapped value will be returned. 
+    /// If the given Operation is InProcess, the Operation will be waited on synchronously, then the same logic will apply
+    /// Otherwise the function throws an exception with the Failure or Cancellation events of the result.
+    let inline returnOrFail operation = 
+        match operation with
+        | Completed result -> result
+        | InProcess _ as inProcess -> inProcess |> wait
+        | Cancelled events -> events |> Failure
+        |> Result.returnOrFail 
