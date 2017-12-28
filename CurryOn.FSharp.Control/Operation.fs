@@ -81,7 +81,7 @@ module Result =
         else aggregate :> exn
 
     /// Converts a System.Exception to an instance of the 'event type and then creates a Failure OperationResult with that event
-    let inline convertExceptionToResult<'result,'event> (except: exn) =
+    let inline ofException<'result,'event> (except: exn) =
         let ex = 
             match except with
             | :? AggregateException as agg -> unwrapAggregateException agg
@@ -266,9 +266,9 @@ module Result =
     let inline ofTask<'result,'event> (task: Task<'result>) =
         task.ContinueWith(fun (t: Task<'result>) -> 
             if t.IsFaulted
-            then convertExceptionToResult<'result,'event> t.Exception
+            then ofException<'result,'event> t.Exception
             elif t.IsCanceled
-            then convertExceptionToResult <| OperationCanceledException()
+            then ofException <| OperationCanceledException()
             else t.Result |> success)
 
     /// Categorizes a result based on its state and the presence of extra messages
@@ -358,7 +358,7 @@ module Operation =
                     let! result = inProcess.Task |> Async.AwaitTask
                     return Result.success result
                 with | ex ->
-                    return ex |> Result.convertExceptionToResult
+                    return ex |> Result.ofException
             | Deferred deferred -> return! waitAsync deferred.Value
             | Cancelled events -> return Failure events
         }
@@ -445,5 +445,27 @@ module Operation =
         |> Result.returnOrFail 
 
     /// Converts a System.Exception to an instance of the 'event type and then creates a Completed Failure Operation with that event
-    let inline convertExceptionToResult<'result,'event> (except: exn) =
-        Completed <| Result.convertExceptionToResult<'result,'event> except
+    let inline ofException<'result,'event> (except: exn) =
+        Completed <| Result.ofException<'result,'event> except
+
+    /// Executes multiple Operations in parallel and asynchronously returns an array of the results
+    /// Note:  The identifier 'parallel' is reserved by F# for future usage,
+    ///        so this function's name must be uppercase
+    let inline Parallel (operations: Operation<'result,'event> seq) =
+        async {
+            let rec exec operation =
+                match operation with
+                | Completed result -> 
+                    Task.FromResult result
+                | InProcess inProcess -> 
+                    inProcess.Task.ContinueWith(fun (t: Task<'result>) ->
+                        if t.IsFaulted
+                        then Result.ofException t.Exception
+                        elif t.IsCanceled
+                        then Result.ofException <| OperationCanceledException()
+                        else Result.successWithEvents t.Result inProcess.EventsSoFar)
+                | Cancelled events -> Task.FromResult <| Failure events
+                | Deferred deferred -> deferred.Value |> exec
+            
+            return! Task.WhenAll(operations |> Seq.map exec) |> Async.AwaitTask                
+        }

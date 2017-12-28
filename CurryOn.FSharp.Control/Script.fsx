@@ -174,13 +174,5 @@ let myFirstDomainOp () =
 let mySecondDomainOp () = 
     operation {
         let! x = myFirstDomainOp()
-        return x
-    }
-
-
-let myLazyDomainOp =
-    lazy_operation {
-        let! x = myFirstDomainOp ()
-        let! y = myLazyLazyOp
-        return Result.success x + y
+        return! Result.successWithEvents x [NoErrors]
     }

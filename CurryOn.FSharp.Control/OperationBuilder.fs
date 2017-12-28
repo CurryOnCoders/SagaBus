@@ -80,13 +80,17 @@ module OperationBuilder =
     /// Used to return a value.
     let inline retEx (x : 'a) = Return <| Result.success<'a,exn> x
 
+    /// Binding function for operation results
+    let inline bindResult (result: OperationResult<'a,'event>) (cont: 'a -> OperationStep<'b,'event>) =
+        match result with
+        | Success successfulResult -> cont successfulResult.Result
+        | Failure errors -> Return <| Failure errors
+
     /// Primary binding function for operations
     let rec bind (op: Operation<'a,'event>) (cont: 'a -> OperationStep<'b,'event>) =
         match op with
-        | Completed result ->
-            match result with
-            | Success successfulResult -> cont successfulResult.Result
-            | Failure errors -> Return <| Failure errors
+        | Completed result -> 
+            bindResult result cont
         | InProcess inProcess ->
             let awt = inProcess.Task.ConfigureAwait(false).GetAwaiter()
             if awt.IsCompleted 
@@ -246,7 +250,7 @@ module OperationBuilder =
         // This matches C# Task Async behavior where you won't see an exception until awaiting the task,
         // even if it failed before reaching the first "await".
         with | ex ->
-            Operation.convertExceptionToResult<'result,'event> ex
+            Operation.ofException<'result,'event> ex
 
     /// Runs an OperationStep as a task -- with a short-circuit for immediately completed steps.
     let rec runEx (firstStep : unit -> OperationStep<'result,exn>) =
@@ -306,6 +310,8 @@ module OperationBuilder =
             bindTaskNoContext task continuation
         member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
             bind op continuation
+        member inline __.Bind(result : OperationResult<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
+            bindResult result continuation
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
 
@@ -329,6 +335,8 @@ module OperationBuilder =
             bindTaskNoContext task continuation
         member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
             bind op continuation
+        member inline __.Bind(result : OperationResult<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
+            bindResult result continuation
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
 
