@@ -2,8 +2,6 @@
 
 open FSharp.Reflection
 open System
-open System.Runtime.CompilerServices
-open System.Threading
 open System.Threading.Tasks
 
 /// Represents the successful result of an Operation that also yields events
@@ -286,13 +284,10 @@ module Result =
       | Warn (_,warnings) -> Failure warnings
       | _  -> result 
 
-/// Represents an incomplete operation that is currently executing
-[<Struct>]
-type InProcessOperation<'result,'event> = 
-    {
-        Task: Task<'result>
-        EventsSoFar: 'event list
-    }
+/// A specific case of System.Threading.Tasks.Task<'t> which carries a list of events
+/// along with the result of the task, to enable asynchronous operations to propogate
+/// events from one step in an operation to the next.
+type InProcessOperation<'result,'event> = Task<'result*'event list>
 
 /// Helper type for creating Lazy values that raise an event when they are evaluated
 type EventingLazy<'a> (lazyValue: 'a Lazy) =
@@ -316,13 +311,13 @@ and [<Struct>] Operation<'result,'event> =
     member this.Events =
         match this with
         | Completed result -> result.Events
-        | InProcess inProcess -> inProcess.EventsSoFar
+        | InProcess inProcess -> inProcess.Result |> snd
         | Deferred deferred -> deferred.Value.Events
         | Cancelled events -> events
     override this.ToString () =
         match this with
         | Completed result -> sprintf "Operation Completed: %O" result
-        | InProcess inProcess -> sprintf "Operation In Process: %A" inProcess.EventsSoFar
+        | InProcess inProcess -> sprintf "Operation In Process: %O" inProcess
         | Deferred deferred -> sprintf "Operation Deferred: %A" deferred
         | Cancelled events -> sprintf "Operation Cancelled: %A" events
 
@@ -344,7 +339,16 @@ module Operation =
     let rec wait operation =
         match operation with
         | Completed result -> result
-        | InProcess inProcess -> Result.ofTask(inProcess.Task).Result
+        | InProcess inProcess -> 
+            inProcess.ContinueWith(fun (task: Task<_*_>) -> 
+                if task.IsFaulted
+                then Result.ofException task.Exception
+                elif task.IsCanceled
+                then Result.ofException <| OperationCanceledException()
+                else let result,events = task.Result
+                     if events |> List.isEmpty
+                     then Result.success result
+                     else Result.successWithEvents result events).Result                
         | Deferred deferred -> wait deferred.Value
         | Cancelled events -> Failure events
 
@@ -355,8 +359,10 @@ module Operation =
             | Completed result -> return result
             | InProcess inProcess ->
                 try
-                    let! result = inProcess.Task |> Async.AwaitTask
-                    return Result.success result
+                    let! result,events = inProcess |> Async.AwaitTask
+                    if events |> List.isEmpty
+                    then return Result.success result
+                    else return Result.successWithEvents result events
                 with | ex ->
                     return ex |> Result.ofException
             | Deferred deferred -> return! waitAsync deferred.Value
@@ -370,9 +376,7 @@ module Operation =
     let rec complete operation =
         match operation with
         | Completed _ as completed -> completed 
-        | InProcess _ as inProcess ->
-            let result = wait inProcess
-            Completed result
+        | InProcess _ as inProcess -> inProcess |> wait |> Completed
         | Deferred deferred -> complete deferred.Value
         | Cancelled events -> Completed <| Failure events
 
@@ -391,11 +395,20 @@ module Operation =
     /// Returns a Task<Operation<'result,'event>> representing the Completed Operation when it has finished executing
     let inline completeTask operation = operation |> (completeAsync >> Async.StartAsTask)
 
+    /// Converts a System.Exception to an instance of the 'event type and then creates a Completed Failure Operation with that event
+    let inline ofException<'result,'event> (except: exn) =
+        Completed <| Result.ofException<'result,'event> except
+
     /// Merges the given events into the existing operation
     let rec mergeEvents operation events =
         match operation with
         | Completed result -> Completed <| Result.mergeEvents result events
-        | InProcess inProcess -> {inProcess with EventsSoFar = (events@inProcess.EventsSoFar)} |> InProcess
+        | InProcess inProcess -> 
+            inProcess.ContinueWith(fun (task: Task<_*_>) ->
+                if not (task.IsFaulted || task.IsCanceled)
+                then let result,taskEvents = task.Result
+                     Task.FromResult(result, (taskEvents @ events))
+                else task).Unwrap() |> InProcess
         | Deferred deferred -> lazy(mergeEvents deferred.Value events) |> defer
         | Cancelled eventsSoFar -> events @ eventsSoFar |> Cancelled
 
@@ -444,10 +457,6 @@ module Operation =
         | Cancelled events -> events |> Failure
         |> Result.returnOrFail 
 
-    /// Converts a System.Exception to an instance of the 'event type and then creates a Completed Failure Operation with that event
-    let inline ofException<'result,'event> (except: exn) =
-        Completed <| Result.ofException<'result,'event> except
-
     /// Executes multiple Operations in parallel and asynchronously returns an array of the results
     /// Note:  The identifier 'parallel' is reserved by F# for future usage,
     ///        so this function's name must be uppercase
@@ -458,12 +467,15 @@ module Operation =
                 | Completed result -> 
                     Task.FromResult result
                 | InProcess inProcess -> 
-                    inProcess.Task.ContinueWith(fun (t: Task<'result>) ->
-                        if t.IsFaulted
-                        then Result.ofException t.Exception
-                        elif t.IsCanceled
+                    inProcess.ContinueWith(fun (task: Task<_*_>) ->
+                        if task.IsFaulted
+                        then Result.ofException task.Exception
+                        elif task.IsCanceled
                         then Result.ofException <| OperationCanceledException()
-                        else Result.successWithEvents t.Result inProcess.EventsSoFar)
+                        else let result,events = task.Result
+                             if events |> List.isEmpty
+                             then Result.success result
+                             else Result.successWithEvents result events)
                 | Cancelled events -> Task.FromResult <| Failure events
                 | Deferred deferred -> deferred.Value |> exec
             

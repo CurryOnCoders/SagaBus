@@ -1,5 +1,4 @@
-﻿#load "Operation.fs"
-#load "OperationBuilder.fs"
+﻿#r "bin/Debug/CurryOn.FSharp.Control.dll"
 
 open FSharp.Control
 open System
@@ -162,17 +161,26 @@ myLazyLazyOp |> Operation.wait
 
 type MyDomainEvents =
 | GenericError
+| InfoMessage
+| WarningMessage
 | NoErrors
 
 let myFirstDomainOp () =
     operation {
         let x = 3
         let y = 5
-        return! Result.successWithEvents (x + y) [NoErrors]
+        return! Result.successWithEvents (x + y) [InfoMessage]
     }
 
 let mySecondDomainOp () = 
     operation {
         let! x = myFirstDomainOp()
-        return! Result.successWithEvents x [NoErrors]
+        return! Result.successWithEvents x [WarningMessage]
+    }
+
+let myThirdDomainOp =
+    operation {
+        let! x = myFirstDomainOp()
+        let! y = mySecondDomainOp()
+        return! Result.successWithEvents (x + y) [NoErrors]
     }

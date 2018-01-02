@@ -1,13 +1,29 @@
 ﻿namespace FSharp.Control
 
-open FSharp.Reflection
 open System
 open System.Runtime.CompilerServices
-open System.Threading
 open System.Threading.Tasks
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module OperationBuilder =
+    /// An exception type to be used when executing operation steps, to set a failed result without
+    /// losing any domain events that have occurred on previous steps of the Operation
+    type IntermediateOperationEventsException<'event>(events: 'event list) =
+        inherit Exception(String.Join(",\r\n", events |> List.map (fun e -> e.ToString())))
+        member __.Events = events
+        
+    /// Convert a list of domain events into an Exception (for use when creating a failed task)
+    let inline private failEx events = IntermediateOperationEventsException(events)
+
+    /// Extensions to Task<'a> to support creating failed tasks from exceptions and domain events
+    type Task<'a> with
+        static member FromException(ex: exn) =
+            let tcs = TaskCompletionSource<'a>()
+            tcs.SetException(ex)
+            tcs.Task
+        static member FromFailureEvents(events) =
+            Task.FromException(events |> failEx)
+
     /// Represents the completion notification and continuation for an asynchronous operation
     [<Struct>]
     type AsyncOperation<'result,'event> =
@@ -18,31 +34,32 @@ module OperationBuilder =
 
     /// Represents the state of an operation, which can either be 
     /// asynchronously waiting for something with a continuation,
-    /// or have completed with a return value and events.
+    /// deferred for lazy evaluaiton, or have already completed 
+    /// and carry forward a return value and possible events.
     and [<Struct>] OperationStep<'result,'event> =
-        | Await of Async: AsyncOperation<'result,'event>
-        | Return of Operation: OperationResult<'result,'event>
-        | ReturnFrom of From: 'result Task
-        | Lazy of Deferred: EventingLazy<OperationStep<'result,'event>>
+        | AsyncStep of Async: AsyncOperation<'result,'event>
+        | CompletedStep of Operation: OperationResult<'result,'event>
+        | InProcessStep of InProcess: InProcessOperation<'result,'event>
+        | LazyStep of Deferred: EventingLazy<OperationStep<'result,'event>>
 
-    /// Provides the mechanism for running an `OperationStep<'result,'event>` as a task returning a continuation task.
+    /// Provides the mechanism for executing an Operation step-by-step using tasks and continuations.
     and OperationStepStateMachine<'result,'event>(firstStep: OperationStep<'result,'event>) as this =
-        let methodBuilder = AsyncTaskMethodBuilder<'result Task>()
+        let methodBuilder = AsyncTaskMethodBuilder<InProcessOperation<'result,'event>>()
         let continuation = ref <| fun () -> firstStep
         let rec processStep step =
             match step with
-            | Return r ->
-                match r with
-                | Success successfulResult -> methodBuilder.SetResult(Task.FromResult(successfulResult.Result))
-                | Failure _ as error -> methodBuilder.SetException(exn <| error.ToString())
+            | CompletedStep result ->
+                match result with
+                | Success successfulResult -> methodBuilder.SetResult(Task.FromResult(successfulResult.Result, successfulResult.Events))
+                | Failure events -> methodBuilder.SetException(failEx events)
                 None
-            | ReturnFrom t ->
+            | InProcessStep t ->
                 methodBuilder.SetResult(t)
                 None
-            | Await async ->
+            | AsyncStep async ->
                 continuation := async.Continuation
                 Some async.Completion
-            | Lazy deferred ->
+            | LazyStep deferred ->
                 let task = deferred.Evaluated  |> Async.AwaitEvent |> Async.StartAsTask
                 let awaiter = task.GetAwaiter()
                 continuation := fun () -> deferred.Value
@@ -72,36 +89,58 @@ module OperationBuilder =
             member __.SetStateMachine(_) = () // Doesn't apply 
 
     /// Used to represent no-ops like the implicit empty "else" branch of an "if" expression.
-    let inline zero () = Return <| Result.success()
+    let inline zero () = CompletedStep <| Result.success()
 
     /// Used to return a value.
-    let inline ret x = Return <| Success x
+    let inline ret x = CompletedStep <| Success x
 
     /// Used to return a value.
-    let inline retEx (x : 'a) = Return <| Result.success<'a,exn> x
+    let inline retEx (x : 'a) = CompletedStep <| Result.success<'a,exn> x
+
+    /// Merge events from a previous OperationStep into the next OperationStep
+    let rec mergeEvents (step: OperationStep<'result,'event>) (events: 'event list) =
+        match step with
+        | CompletedStep result -> CompletedStep <| Result.mergeEvents result events
+        | InProcessStep inProcess -> inProcess.ContinueWith(fun (task: Task<'result*'event list>) -> 
+            if task.IsFaulted 
+            then let taskEvents =
+                    match Result.ofException task.Exception with
+                    | Failure es -> es
+                    | _ -> []
+                 Task<'result*'event list>.FromFailureEvents (events @ taskEvents)
+            elif task.IsCanceled
+            then Task<'result*'event list>.FromFailureEvents events
+            else let result,taskEvents = task.Result
+                 Task<'result*'event list>.FromResult(result, (events @ taskEvents))).Unwrap() |> InProcessStep
+        | AsyncStep async -> AsyncStep {async with Continuation = (fun () -> async.Continuation() |> mergeEvents <| events)}
+        | LazyStep deferred -> lazy(mergeEvents deferred.Value events) |> EventingLazy |> LazyStep
+
 
     /// Binding function for operation results
-    let inline bindResult (result: OperationResult<'a,'event>) (cont: 'a -> OperationStep<'b,'event>) =
+    let inline bindResult (result: OperationResult<'a,'event>) (cont: ('a*'event list) -> OperationStep<'b,'event>) =
         match result with
-        | Success successfulResult -> cont successfulResult.Result
-        | Failure errors -> Return <| Failure errors
+        | Success successfulResult -> cont (successfulResult.Result,successfulResult.Events)
+        | Failure errors -> CompletedStep <| Failure errors
 
     /// Primary binding function for operations
-    let rec bind (op: Operation<'a,'event>) (cont: 'a -> OperationStep<'b,'event>) =
+    let rec bind (op: Operation<'a,'event>) (cont: ('a*'event list) -> OperationStep<'b,'event>) =
         match op with
         | Completed result -> 
             bindResult result cont
         | InProcess inProcess ->
-            let awt = inProcess.Task.ConfigureAwait(false).GetAwaiter()
+            let awt = inProcess.ConfigureAwait(false).GetAwaiter()
             if awt.IsCompleted 
             then cont(awt.GetResult())  // Proceed to the next step based on the result we already have.                
-            else Await {Completion = awt; Continuation = (fun () -> cont(awt.GetResult()))} // Await and continue later when a result is available.
+            else AsyncStep {Completion = awt; Continuation = (fun () -> cont(awt.GetResult()))} // AsyncStep and continue later when a result is available.
         | Deferred deferred ->
             bind deferred.Value cont
         | Cancelled events -> 
-            Return <| Failure events
-
-    type Binder<'result,'event> =
+            CompletedStep <| Failure events
+    
+    /// Due to the way F# structural type constraints work, 
+    /// these functions need to be inside a class to properly
+    /// scope the 'result and 'event type parameters.
+    type AsyncOperationBinder<'result,'event> =
         static member inline private GenericAwait< ^awaitable, ^awaiter, ^input
                                                     when ^awaitable : (member GetAwaiter: unit -> ^awaiter)
                                                     and  ^awaiter   :> ICriticalNotifyCompletion 
@@ -111,7 +150,7 @@ module OperationBuilder =
                 let awaiter = (^awaitable: (member GetAwaiter: unit -> ^awaiter) (awaitable)) // get an awaiter from the awaitable
                 if (^awaiter: (member get_IsCompleted: unit -> bool) (awaiter)) 
                 then continuation (^awaiter: (member GetResult: unit -> ^input) (awaiter)) // shortcut to continue immediately
-                else Await {Completion = awaiter; Continuation = (fun () -> continuation (^awaiter: (member GetResult: unit -> ^input) (awaiter)))}
+                else AsyncStep {Completion = awaiter; Continuation = (fun () -> continuation (^awaiter: (member GetResult: unit -> ^input) (awaiter)))}
 
         static member inline GenericAwaitNoContext< ^taskLike, ^awaitable, ^awaiter, ^input
                                                      when ^taskLike : (member ConfigureAwait: bool -> ^awaitable)
@@ -121,10 +160,10 @@ module OperationBuilder =
                                                      and ^awaiter   : (member GetResult: unit -> ^input) >
             (taskLike: ^taskLike, continuation: ^input -> OperationStep<'result,'event>) : OperationStep<'result,'event> =
                 let awaitable = (^taskLike: (member ConfigureAwait: bool -> ^awaitable) (taskLike, false))
-                Binder<'result,'event>.GenericAwait(awaitable, continuation)
+                AsyncOperationBinder<'result,'event>.GenericAwait(awaitable, continuation)
 
         static member inline GenericAwaitCaptureContext (awaitable, continuation) = 
-            Binder<'result,'event>.GenericAwait(awaitable, continuation)
+            AsyncOperationBinder<'result,'event>.GenericAwait(awaitable, continuation)
 
     /// Special binding for Task<'a> that captures the current context for running the continuation. 
     /// Have to write this out by hand to avoid confusing the compiler
@@ -134,7 +173,7 @@ module OperationBuilder =
         if awaiter.IsCompleted 
         then let result = awaiter.GetResult()
              continuation result  // Proceed to the next step based on the result we already have.
-        else Await {Completion = awaiter; Continuation = (fun () -> // Await and continue later when a result is available.
+        else AsyncStep {Completion = awaiter; Continuation = (fun () -> // AsyncStep and continue later when a result is available.
                 let result = awaiter.GetResult() 
                 continuation result)}  
 
@@ -146,7 +185,7 @@ module OperationBuilder =
         if awaiter.IsCompleted 
         then let result = awaiter.GetResult() 
              continuation result // Proceed to the next step based on the result we already have.
-        else Await {Completion = awaiter; Continuation = (fun () ->  // Await and continue later when a result is available.
+        else AsyncStep {Completion = awaiter; Continuation = (fun () ->  // AsyncStep and continue later when a result is available.
                 let result = awaiter.GetResult()
                 continuation result)}
 
@@ -159,13 +198,13 @@ module OperationBuilder =
     /// This prevents constructs like `operation { return 1; return 2; }`.
     let rec combine (step : OperationStep<unit,'event>) (continuation : unit -> OperationStep<'result,'event>) =
         match step with
-        | Return _ -> continuation()
-        | ReturnFrom t ->
-            Await {Completion = t.GetAwaiter(); Continuation = continuation}
-        | Await async ->
-            Await {Completion = async.Completion; Continuation = (fun () -> combine (async.Continuation()) continuation)}
-        | Lazy deferred ->
-            lazy(combine deferred.Value continuation) |> EventingLazy |> Lazy
+        | CompletedStep _ -> continuation()
+        | InProcessStep t ->
+            AsyncStep {Completion = t.GetAwaiter(); Continuation = continuation}
+        | AsyncStep async ->
+            AsyncStep {Completion = async.Completion; Continuation = (fun () -> combine (async.Continuation()) continuation)}
+        | LazyStep deferred ->
+            lazy(combine deferred.Value continuation) |> EventingLazy |> LazyStep
 
     /// Builds a step that executes the body while the condition predicate is true.
     let rec whileLoop (cond : unit -> bool) (body : unit -> OperationStep<unit,'event>) =
@@ -174,10 +213,10 @@ module OperationBuilder =
                 if cond() then
                     let body = body()
                     match body with
-                    | Return _ -> repeat()
-                    | ReturnFrom t -> Await {Completion = t.GetAwaiter(); Continuation = repeat}
-                    | Await async -> Await {async with Continuation = (fun () -> combine (async.Continuation()) repeat)}
-                    | Lazy deferred -> lazy(whileLoop cond (fun () -> deferred.Value)) |> EventingLazy |> Lazy
+                    | CompletedStep _ -> repeat()
+                    | InProcessStep t -> AsyncStep {Completion = t.GetAwaiter(); Continuation = repeat}
+                    | AsyncStep async -> AsyncStep {async with Continuation = (fun () -> combine (async.Continuation()) repeat)}
+                    | LazyStep deferred -> lazy(whileLoop cond (fun () -> deferred.Value)) |> EventingLazy |> LazyStep
                 else zero ()
              // Run the body the first time and chain it to the repeat logic.
              combine (body()) repeat
@@ -187,14 +226,18 @@ module OperationBuilder =
     /// to retrieve the step, and in the continuation of the step (if any).
     let rec tryWith(step : unit -> OperationStep<'result,'event>) (catch : exn -> OperationStep<'result,'event>) =
         try match step() with
-            | Return _ as i -> i
-            | ReturnFrom t ->
+            | CompletedStep _ as i -> i
+            | InProcessStep t ->
                 let awaitable = t.GetAwaiter()
-                Await {Completion = awaitable; Continuation = (fun () ->
-                    try awaitable.GetResult() |> Result.success |> Return
+                AsyncStep {Completion = awaitable; Continuation = (fun () ->
+                    try let result,events = awaitable.GetResult() 
+                        if events |> List.isEmpty
+                        then Result.success result 
+                        else Result.successWithEvents result events 
+                        |> CompletedStep
                     with | exn -> catch exn)}
-            | Await async -> Await {async with Continuation = (fun () -> tryWith async.Continuation catch)}
-            | Lazy deferred -> lazy(tryWith (fun () -> deferred.Value) catch) |> EventingLazy |> Lazy
+            | AsyncStep async -> AsyncStep {async with Continuation = (fun () -> tryWith async.Continuation catch)}
+            | LazyStep deferred -> lazy(tryWith (fun () -> deferred.Value) catch) |> EventingLazy |> LazyStep
         with | exn -> catch exn
 
     /// Wraps a step in a try/finally. This catches exceptions both in the evaluation of the function
@@ -209,20 +252,25 @@ module OperationBuilder =
                 fin()
                 reraise()
         match step with
-        | Return _ as i ->
+        | CompletedStep _ as i ->
             fin()
             i
-        | ReturnFrom t ->
+        | InProcessStep t ->
             let awaitable = t.GetAwaiter()
-            Await {Completion = awaitable; Continuation = (fun () ->
-                    try awaitable.GetResult() |> Result.success |> Return
+            AsyncStep {Completion = awaitable; Continuation = (fun () ->
+                    try 
+                        let result,events = awaitable.GetResult() 
+                        if events |> List.isEmpty
+                        then result |> Result.success 
+                        else Result.successWithEvents result events
+                        |> CompletedStep
                     with | _ ->
                         fin()
                         reraise())}
-        | Await async ->
-            Await {async with Continuation = (fun () -> tryFinally async.Continuation fin)}
-        | Lazy deferred ->
-            lazy(tryFinally (fun () -> deferred.Value) fin) |> EventingLazy |> Lazy
+        | AsyncStep async ->
+            AsyncStep {async with Continuation = (fun () -> tryFinally async.Continuation fin)}
+        | LazyStep deferred ->
+            lazy(tryFinally (fun () -> deferred.Value) fin) |> EventingLazy |> LazyStep
 
     /// Implements a using statement that disposes `disp` after `body` has completed.
     let inline using (disp : #IDisposable) (body : _ -> OperationStep<'result,'event>) =
@@ -242,45 +290,54 @@ module OperationBuilder =
     let rec run (firstStep : unit -> OperationStep<'result,'event>) =
         try
             match firstStep() with
-            | Return x -> Completed x
-            | ReturnFrom t -> InProcess { Task = t; EventsSoFar = [] }
-            | Await _ as step -> InProcess { Task = OperationStepStateMachine<'result,'event>(step).Run().Unwrap(); EventsSoFar = [] } // sadly can't do tail recursion
-            | Lazy deferred -> lazy((fun () -> deferred.Value) |> run) |> Operation.defer
+            | CompletedStep x -> Completed x
+            | InProcessStep t -> InProcess t
+            | AsyncStep _ as step -> InProcess <| OperationStepStateMachine<'result,'event>(step).Run().Unwrap() // not quite tail recursion -- will have O(n) memory usage
+            | LazyStep deferred -> lazy((fun () -> deferred.Value) |> run) |> Operation.defer
         // Any exceptions should become a Completed Failure Operation, rather than being thrown from this call.
         // This matches C# Task Async behavior where you won't see an exception until awaiting the task,
         // even if it failed before reaching the first "await".
-        with | ex ->
-            Operation.ofException<'result,'event> ex
+        with | :? IntermediateOperationEventsException<'event> as ex -> Completed <| Failure ex.Events
+             | :? AggregateException as aggEx -> 
+                match Result.unwrapAggregateException aggEx with
+                | :? IntermediateOperationEventsException<'event> as ex -> Completed <| Failure ex.Events
+                | ex -> Operation.ofException<'result,'event> ex
+             | ex -> Operation.ofException<'result,'event> ex
 
     /// Runs an OperationStep as a task -- with a short-circuit for immediately completed steps.
     let rec runEx (firstStep : unit -> OperationStep<'result,exn>) =
         try
             match firstStep() with
-            | Return x -> Completed x
-            | ReturnFrom t -> InProcess { Task = t; EventsSoFar = [] }
-            | Await _ as step -> InProcess { Task = OperationStepStateMachine<'result,exn>(step).Run().Unwrap(); EventsSoFar = [] } // sadly can't do tail recursion
-            | Lazy deferred -> lazy((fun () -> deferred.Value) |> runEx) |> Operation.defer
+            | CompletedStep x -> Completed x
+            | InProcessStep t -> InProcess t
+            | AsyncStep _ as step -> InProcess <| OperationStepStateMachine<'result,exn>(step).Run().Unwrap() // not tail recursive -- will have O(n) memory usage
+            | LazyStep deferred -> lazy((fun () -> deferred.Value) |> runEx) |> Operation.defer
         // Any exceptions should become a Completed Failure Operation, rather than being thrown from this call.
         // This matches C# Task Async behavior where you won't see an exception until awaiting the task,
         // even if it failed before reaching the first "await".
-        with | ex ->
-            Completed <| Failure [ex]
+        with | ex -> Completed <| Failure [ex]
 
     /// Lazily Evaluate an OperationStep
-    let runLazy (firstStep : unit -> OperationStep<'result,'event>) =
+    let runLazyStep (firstStep : unit -> OperationStep<'result,'event>) =
         lazy(run firstStep) |> Operation.defer
 
-    /// Return Operations from other Opreations
+    /// CompletedStep Operations from other Opreations
     let rec returnOp (op: Operation<'result,'event>) =
         match op with
-        | Completed result -> Return result            
+        | Completed result -> CompletedStep result            
         | InProcess inProcess ->
-            let awt = inProcess.Task.ConfigureAwait(false).GetAwaiter()
-            if awt.IsCompleted 
-            then Return (Result.success <| awt.GetResult())  // Proceed to the next step based on the result we already have.                
-            else Await {Completion = awt; Continuation = (fun () -> Return (Result.success <| awt.GetResult()))} // Await and continue later when a result is available.
+            let awaiter = inProcess.ConfigureAwait(false).GetAwaiter()
+            let inline getResult () =
+                let result,events = awaiter.GetResult()
+                if events |> List.isEmpty
+                then Result.success result
+                else Result.successWithEvents result events
+                |> CompletedStep
+            if awaiter.IsCompleted // Proceed to the next step based on the result we already have. 
+            then getResult()
+            else AsyncStep {Completion = awaiter; Continuation = (fun () -> getResult())} // AsyncStep and continue later when a result is available.
         | Deferred deferred -> returnOp deferred.Value // Force Evaluation in ReturnFrom
-        | Cancelled events -> Return <| Failure events
+        | Cancelled events -> CompletedStep <| Failure events
 
     type UnitTask =
         struct
@@ -296,9 +353,9 @@ module OperationBuilder =
         member inline __.Zero() = zero ()
         member inline __.Return(x) = retEx x
         member inline __.Return(s: SuccessfulResult<_,_>) = ret s
-        member inline __.ReturnFrom(f: OperationResult<_,_>) = Return f
-        member inline __.ReturnFrom(task : _ Task) = ReturnFrom task
-        member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = Return <| Success s
+        member inline __.ReturnFrom(f: OperationResult<_,_>) = CompletedStep f
+        member inline __.ReturnFrom(task : _ Task) = InProcessStep task
+        member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
         member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
         member inline __.While(condition : unit -> bool, body : unit -> OperationStep<unit,'event>) = whileLoop condition body
@@ -307,23 +364,23 @@ module OperationBuilder =
         member inline __.TryFinally(body : unit -> OperationStep<_,_>, fin : unit -> unit) = tryFinally body fin
         member inline __.Using(disp : #IDisposable, body : #IDisposable -> OperationStep<_,_>) = using disp body
         member inline __.Bind(task : 'a Task, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindTaskNoContext task continuation
+            bindTaskNoContext task continuation        
         member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bind op continuation
+            bind op (fun (result,events) -> continuation result |> mergeEvents <| events)    
         member inline __.Bind(result : OperationResult<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindResult result continuation
+            bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
 
     type LazyOperationBuilder() =
         member inline __.Delay(f : unit -> OperationStep<_,_>) = f
-        member inline __.Run(f : unit -> OperationStep<'result,'event>) = runLazy f
+        member inline __.Run(f : unit -> OperationStep<'result,'event>) = runLazyStep f
         member inline __.Zero() = zero ()
         member inline __.Return(x) = retEx x
         member inline __.Return(s: SuccessfulResult<_,_>) = ret s
-        member inline __.ReturnFrom(f: OperationResult<_,_>) = Return f
-        member inline __.ReturnFrom(task : _ Task) = ReturnFrom task
-        member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = Return <| Success s
+        member inline __.ReturnFrom(f: OperationResult<_,_>) = CompletedStep f
+        member inline __.ReturnFrom(task : _ Task) = InProcessStep task
+        member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
         member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
         member inline __.While(condition : unit -> bool, body : unit -> OperationStep<unit,'event>) = whileLoop condition body
@@ -334,9 +391,9 @@ module OperationBuilder =
         member inline __.Bind(task : 'a Task, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
             bindTaskNoContext task continuation
         member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bind op continuation
+            bind op (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(result : OperationResult<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindResult result continuation
+            bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
 
@@ -352,19 +409,12 @@ module ContextInsensitive =
     [<Obsolete("It is no longer necessary to wrap untyped System.Thread.Tasks.Task objects with \"unitTask\".")>]
     let inline unitTask (t : Task) = t.ConfigureAwait(false)
 
-    // These are fallbacks when the Bind and ReturnFrom on the builder object itself don't apply.
-    // This is how we support binding arbitrary task-like types.
-    type OperationBuilder.OperationBuilder with
-        member inline this.ReturnFrom(taskLike) =
-            OperationBuilder.Binder<_,_>.GenericAwaitCaptureContext(taskLike, OperationBuilder.ret)
-        member inline this.Bind(taskLike, continuation : _ -> OperationBuilder.OperationStep<'result,'event>) : OperationBuilder.OperationStep<'result,'event> =
-            OperationBuilder.Binder<'result,'event>.GenericAwaitCaptureContext(taskLike, continuation)
-    
+    // These are fallbacks when the Bind and InProcessStep on the builder object itself don't apply.
+    // This is how we support binding arbitrary task-like types.    
     [<AutoOpen>]
     module HigherPriorityBinds =
-        // When it's possible for these to work, the compiler should prefer them since they shadow the ones above.
         type OperationBuilder.OperationBuilder with
             member inline this.ReturnFrom(configurableTaskLike) =
-                OperationBuilder.Binder<_,_>.GenericAwaitNoContext(configurableTaskLike, OperationBuilder.ret)
+                OperationBuilder.AsyncOperationBinder<_,_>.GenericAwaitNoContext(configurableTaskLike, OperationBuilder.ret)
             member inline this.Bind(configurableTaskLike, continuation : _ -> OperationBuilder.OperationStep<'result,'event>) : OperationBuilder.OperationStep<'result,'event> =
-                OperationBuilder.Binder<'result,'event>.GenericAwaitNoContext(configurableTaskLike, continuation)
+                OperationBuilder.AsyncOperationBinder<'result,'event>.GenericAwaitNoContext(configurableTaskLike, continuation)
