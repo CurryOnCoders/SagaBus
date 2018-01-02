@@ -103,7 +103,7 @@ To faciliate working with Operations and OperationResults, the framework provide
 `Result.ok` can be used to test whether an OperationResult is successful.
 
 `Operation.ok` can be used to test whether an entire Operation is successful.  This will force deferred Operations to evaluate and will synchronously wait for InProcess Operations to finish.
----
+***
 
 `Result.failed` can be used to test whether an OperationResult is a failure.
 
@@ -112,27 +112,27 @@ To faciliate working with Operations and OperationResults, the framework provide
 `Operation.cancelled` can be used to test whether an Operation has been cancelled.  
 
 `Operation.deferred` can be used to test whether an Operation is deferred for lazy evaluation.
----
+***
 
 `Result.ofOption` can be used to convert an `Option<'result>` into an `OperationResult<'result,'event>`, with the `Some value` case translating to `Success value` and the `None` case to `Failure []`
 
 `Result.ofOptionWithEvent` can be used to convert an `Option<'result>` into an `OperationResult<'result,'event>`, with the `Some value` case translating to `Success value` and the `None` case to `Failure [event]` (the provided event is used for the None/Failure case).
 
 `Result.ofOptionWithEvents` can be used to convert an `Option<'result>` into an `OperationResult<'result,'event>`, with the `Some value` case translating to `Success value` and the `None` case to `Failure events` (the provided events are used for the None/Failure case).
----
+***
 
 `Result.ofChoice` can be used to convert a `Choice<'result,'event>` into an `OperationResult<'result,'event>`, with the `Choice1of2 value` case translating to `Success value` and the `Choice2of2 event` case to `Failure [event]`
 
 `Result.ofChoiceWithEvents` can be used to convert a `Choice<'result,'event>` into an `OperationResult<'result,'event>`, with the `Choice1of2 value` case translating to `Success value` and the `Choice2of2 events` case to `Failure events`
----
+***
 
 `Result.ofTask` can be used to convert a `Task<'result>` into a `Task<OperationResult<'result,'event>>`
----
+***
 
 `Result.ofException` can be used to convert any `System.Exception` to a Failed `OperationResult<'result,'event>`
 
 `Operation.ofException` can be used to convert any `System.Exception` to a Completed Operation with a Failed `OperationResult<'result,'event>`
----
+***
 
 `Operation.complete` can be used to force an InProcess or Deferred Operation to complete, and waits for the result synchronously, returning a Completed Operation.
 
