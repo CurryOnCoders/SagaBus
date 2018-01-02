@@ -35,17 +35,17 @@ let myFourthOp =
         return x + y
     }
 
-let myFifthOp =
+let myFifthOp() =
     operation {
         use writer = new StreamWriter(@"C:\Temp\Numbers.txt", false)
         for _ in [1..1000] do
-            do! writer.WriteLineAsync(sprintf "%d" <| rng.Next())// rng.Next(1, 100))
+            do! writer.WriteLineAsync(sprintf "%d" <| rng.Next(1, 100))
         return writer.Flush()
     }
 
 let mySixthOp =
     operation {
-        let! start = myFifthOp
+        let! start = myFifthOp()
         use reader = new StreamReader(@"C:\Temp\Numbers.txt")
         let! numbers = reader.ReadToEndAsync()
         return numbers.Split([|"\r\n"|], StringSplitOptions.RemoveEmptyEntries) |> Seq.map Int32.Parse |> Seq.sum
@@ -184,3 +184,77 @@ let myThirdDomainOp =
         let! y = mySecondDomainOp()
         return! Result.successWithEvents (x + y) [NoErrors]
     }
+
+
+/// ReadMe.md samples
+open System.IO
+
+//let readFile (fileName: string) =
+//    operation {
+//        use fileStream = new StreamReader(fileName)
+//        return! fileStream.ReadToEndAsync()
+//    }  
+
+type FileAccessEvents =
+| FileReadSuccessfully
+| FileNotFound of string
+| FileIsInSystemRootWarning
+| UnhandledException of exn // This is returned automatically if an unhandled exception is thrown by an Operation
+
+let getFile (fileName: string) =
+    operation {
+        let file = FileInfo fileName
+        return! if not file.Exists
+                then Result.failure [FileNotFound file.FullName]
+                else Result.success file
+    }
+
+let openFile fileName =
+    operation {
+        let! file = getFile fileName
+        return! Result.success <| file.OpenText()
+    }
+
+let readFile fileName = 
+    operation {
+        use! fileStream = openFile fileName
+        let! fileText = fileStream.ReadToEndAsync()
+        return! Result.successWithEvents fileText [FileReadSuccessfully]
+    }
+
+let writeFile fileName contents =
+    operation {
+        let! file = getFile fileName
+        let stream = file.OpenWrite()
+        do! stream.AsyncWrite contents
+        return! if file.DirectoryName = Environment.SystemDirectory
+                then Result.success ()
+                else Result.successWithEvents () [FileIsInSystemRootWarning]
+    }
+
+readFile <| @"C:\Temp\Numbers.txt"
+
+let copyFile inputFile outputFile =
+    operation {
+        let! fileText = readFile inputFile
+        let fileBytes = fileText |> System.Text.Encoding.UTF8.GetBytes
+        return! writeFile outputFile fileBytes
+    }
+
+copyFile "input.txt" "output.txt" |> Operation.returnOrFail
+
+
+#r "System.Net.Http"
+open System.Net.Http
+
+let fetchUrl (url: string) = 
+    operation {
+        use client = new HttpClient()
+        return! client.GetStringAsync url
+    }
+
+[fetchUrl "http://www.microsoft.com";
+ fetchUrl "http://www.google.com";
+ fetchUrl "http://www.github.com";]
+|> Operation.Parallel
+|> Async.RunSynchronously

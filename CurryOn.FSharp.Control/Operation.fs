@@ -157,7 +157,7 @@ module Result =
     let inline returnOrFail result = 
         let inline raiseExn events = 
             events
-            |> Seq.map (sprintf "%O")
+            |> Seq.map (sprintf "%A")
             |> String.concat (sprintf "%s\t" Environment.NewLine)
             |> failwith
         either fst raiseExn result

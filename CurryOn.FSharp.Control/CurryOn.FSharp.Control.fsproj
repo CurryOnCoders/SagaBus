@@ -53,6 +53,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Operation.fs" />
     <Compile Include="OperationBuilder.fs" />
+    <None Include="ReadMe.md" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>

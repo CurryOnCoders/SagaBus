@@ -339,6 +339,10 @@ module OperationBuilder =
         | Deferred deferred -> returnOp deferred.Value // Force Evaluation in ReturnFrom
         | Cancelled events -> CompletedStep <| Failure events
 
+    /// Allow Operation computations to return! a Task<'result> directly
+    let returnTask<'result,'event> (task: Task<'result>) =
+        bindTaskNoContext task (fun result -> CompletedStep <| Result.success<'result,'event> result)
+
     type UnitTask =
         struct
             val public Task : Task
@@ -354,7 +358,9 @@ module OperationBuilder =
         member inline __.Return(x) = retEx x
         member inline __.Return(s: SuccessfulResult<_,_>) = ret s
         member inline __.ReturnFrom(f: OperationResult<_,_>) = CompletedStep f
-        member inline __.ReturnFrom(task : _ Task) = InProcessStep task
+        member inline __.ReturnFrom(task: _ Task) = InProcessStep task
+        member inline __.ReturnFrom(async: _ Async) = (Async.StartAsTask >> InProcessStep) async
+        member inline __.ReturnFrom(task: Task<'a>) = returnTask<'a,exn> task
         member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
         member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
@@ -380,6 +386,8 @@ module OperationBuilder =
         member inline __.Return(s: SuccessfulResult<_,_>) = ret s
         member inline __.ReturnFrom(f: OperationResult<_,_>) = CompletedStep f
         member inline __.ReturnFrom(task : _ Task) = InProcessStep task
+        member inline __.ReturnFrom(async: _ Async) = (Async.StartAsTask >> InProcessStep) async
+        member inline __.ReturnFrom(task: Task<'a>) = returnTask<'a,exn> task
         member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
         member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
