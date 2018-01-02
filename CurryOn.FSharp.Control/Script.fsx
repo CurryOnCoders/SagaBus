@@ -196,6 +196,7 @@ open System.IO
 //    }  
 
 type FileAccessEvents =
+| FileOpenedSuccessfully
 | FileReadSuccessfully
 | FileNotFound of string
 | FileIsInSystemRootWarning
@@ -212,7 +213,7 @@ let getFile (fileName: string) =
 let openFile fileName =
     operation {
         let! file = getFile fileName
-        return! Result.success <| file.OpenText()
+        return! file.OpenText() |> Result.successWithEvents <| [FileOpenedSuccessfully]
     }
 
 let readFile fileName = 

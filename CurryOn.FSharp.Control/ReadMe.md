@@ -33,7 +33,7 @@ type OperationResult<'result,'event> =
 | Failure of ErrorList: 'event list
 ```
 
-The **OperationResult** type represents the result of a Completed Operation.  In the *readFile* example above, the result type would be `OperationResult<string,exn>`, since the resulting value is a `string`, and since the operation may throw exceptions, such as `FileNotFoundException`.  If no exceptions are thrown an the Operation completed successfully, the OperationResult will be the `Success` case, and the result will be contained within a `SuccessfulResult<'result,'event>`.  If any exception is thrown during the operation, the OperationResult will be the Failure case, and any exceptions thrown will be present in the list.
+The **OperationResult** type represents the result of a Completed Operation.  In the *readFile* example above, the result type would be `OperationResult<string,exn>`, since the resulting value is a `string`, and since the operation may throw exceptions, such as `FileNotFoundException`.  If no exceptions are thrown and the Operation completed successfully, the OperationResult will be the `Success` case, and the result will be contained within a `SuccessfulResult<'result,'event>`.  If any exception is thrown during the operation, the OperationResult will be the Failure case, and any exceptions thrown will be present in the list.
 
 The `SuccessfulResult<'result,'event>` type is used to contain the resulting value and any domain events associated with a successful Operation.  The `SuccessfulResult` type also has members `.Result` and `.Events` to provide direct access to the result value and the domain events without pattern-matching.
 
@@ -57,6 +57,7 @@ This allows the framework to support a usage pattern where a successful Operatio
 
 ```fsharp
 type FileAccessEvents =
+| FileOpenedSuccessfully
 | FileReadSuccessfully
 | FileNotFound of string
 | FileIsInSystemRootWarning
@@ -73,7 +74,7 @@ let getFile (fileName: string) =
 let openFile fileName =
     operation {
         let! file = getFile fileName
-        return! Result.success <| file.OpenText()
+        return! file.OpenText() |> Result.successWithEvents <| [FileOpenedSuccessfully]
     }
 
 let readFile fileName = 
@@ -94,7 +95,7 @@ let writeFile fileName contents =
     }
 ```
 
-When used in this way, the Operation framework allows for any known errors and warnings to be handled and returned from one Operation to another, and also allows any unforseen exceptions that may be raised to be captured with the `UnhandledException` case.  It is recommended to include a case such as this in any discrimintaed union used for the `'event` type of an Operation, as the framework contains special logic to seek out a union case with a single field of type `exn` when an uhandled exception is thrown from an Operation.  This allows the exception to be captured and returned without changing the type of the Operation from `Operation<'result,'event>` to `Operation<'result,exn>`.  If the Operation is already of type `Operation<'result,exn>`, the unhandled exception is returned in the list of exceptions in the Failure case of the OperationResult.
+When used in this way, the Operation framework allows for informational messages or domain events to be propogated from one operation to another, such that calling `readFile` (with a file that exists) would return a Success with two events, FileOpenedSuccessfully and FileReadSuccessfully.  It also allows any known errors and warnings to be handled and returned from one Operation to another, terminating when a Failure is encountered without running Operations farther down the chain.  Any unforseen exceptions that may still be raised will be captured with the `UnhandledException` case.  It is recommended to include a case such as this in any discrimintaed union used for the `'event` type of an Operation, as the framework contains special logic to seek out a union case with a single field of type `exn` when an uhandled exception is thrown from an Operation.  This allows the exception to be captured and returned without changing the type of the Operation from `Operation<'result,'event>` to `Operation<'result,exn>`.  If the Operation is already of type `Operation<'result,exn>`, the unhandled exception is returned in the list of exceptions in the Failure case of the OperationResult.
 
 
 #### Working with Operations and OperationResults
