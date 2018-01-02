@@ -101,28 +101,45 @@ When used in this way, the Operation framework allows for any known errors and w
 To faciliate working with Operations and OperationResults, the framework provides a library of functions to simplify the interpretation, evaluation, and combination of Operations and their results.  
 
 `Result.ok` can be used to test whether an OperationResult is successful.
+
 `Operation.ok` can be used to test whether an entire Operation is successful.  This will force deferred Operations to evaluate and will synchronously wait for InProcess Operations to finish.
+---
 
 `Result.failed` can be used to test whether an OperationResult is a failure.
+
 `Operation.failed` can be used to test whether an entire Operation has failed.  This will force deferred Operations to evaluate and will synchronously wait for InProcess Operations to finish.
+
 `Operation.cancelled` can be used to test whether an Operation has been cancelled.  
+
 `Operation.deferred` can be used to test whether an Operation is deferred for lazy evaluation.
+---
 
 `Result.ofOption` can be used to convert an `Option<'result>` into an `OperationResult<'result,'event>`, with the `Some value` case translating to `Success value` and the `None` case to `Failure []`
+
 `Result.ofOptionWithEvent` can be used to convert an `Option<'result>` into an `OperationResult<'result,'event>`, with the `Some value` case translating to `Success value` and the `None` case to `Failure [event]` (the provided event is used for the None/Failure case).
+
 `Result.ofOptionWithEvents` can be used to convert an `Option<'result>` into an `OperationResult<'result,'event>`, with the `Some value` case translating to `Success value` and the `None` case to `Failure events` (the provided events are used for the None/Failure case).
+---
 
 `Result.ofChoice` can be used to convert a `Choice<'result,'event>` into an `OperationResult<'result,'event>`, with the `Choice1of2 value` case translating to `Success value` and the `Choice2of2 event` case to `Failure [event]`
+
 `Result.ofChoiceWithEvents` can be used to convert a `Choice<'result,'event>` into an `OperationResult<'result,'event>`, with the `Choice1of2 value` case translating to `Success value` and the `Choice2of2 events` case to `Failure events`
+---
 
 `Result.ofTask` can be used to convert a `Task<'result>` into a `Task<OperationResult<'result,'event>>`
+---
 
 `Result.ofException` can be used to convert any `System.Exception` to a Failed `OperationResult<'result,'event>`
+
 `Operation.ofException` can be used to convert any `System.Exception` to a Completed Operation with a Failed `OperationResult<'result,'event>`
+---
 
 `Operation.complete` can be used to force an InProcess or Deferred Operation to complete, and waits for the result synchronously, returning a Completed Operation.
+
 `Operation.completeAsync` can be used to force an InProcess or Deferred Operation to complete, and returns an `Async<Operation<'result,'event>>` where the Operation returned by the Async is guaranteed to be Completed.
+
 `Operation.completeTask` can be used to force an InProcess or Deferred Operation to complete, and returns a `Task<Operation<'result,'event>>` where the Task's Result is guaranteed to be a Completed Operation.
+
 
 #### Interoperability
 While the framework aims to make Operations easy to work with and combine to create larger Operations and entire programs, there may ultimately be a point where the program needs to either return a value or throw an exception, such as when interoperating with another library or with a user interface.  In this case, it is recommended to use the `Operation.returnOrFail` function to force evaluation of the Operation and either return the value of the successful result, or throw an exception with the failure events.
