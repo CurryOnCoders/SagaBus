@@ -1,4 +1,4 @@
-﻿#CurryOn.FSharp.Control
+﻿# CurryOn.FSharp.Control
 The CurryOn.FSharp.Control library extends the FSharp.Control namespace with a framework for enabling the use of [Railway-Oriented Programming](https://fsharpforfunandprofit.com/rop/) patterns with the [Task Parallel Library (TPL)](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/task-parallel-library-tpl), [Async Workflows](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/asynchronous-workflows), and [Lazy Computations](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/lazy-computations).  
 
 This is accomplished by providing a set of types for working with **Operations** and their results.  An **Operation** is any function or expression that is intended to participate in the Railway-Oriented patterns, and is created by use of the `operation` Computation Expression.
@@ -97,7 +97,7 @@ let writeFile fileName contents =
 When used in this way, the Operation framework allows for any known errors and warnings to be handled and returned from one Operation to another, and also allows any unforseen exceptions that may be raised to be captured with the `UnhandledException` case.  It is recommended to include a case such as this in any discrimintaed union used for the `'event` type of an Operation, as the framework contains special logic to seek out a union case with a single field of type `exn` when an uhandled exception is thrown from an Operation.  This allows the exception to be captured and returned without changing the type of the Operation from `Operation<'result,'event>` to `Operation<'result,exn>`.  If the Operation is already of type `Operation<'result,exn>`, the unhandled exception is returned in the list of exceptions in the Failure case of the OperationResult.
 
 
-####Working with Operations and OperationResults
+#### Working with Operations and OperationResults
 To faciliate working with Operations and OperationResults, the framework provides a library of functions to simplify the interpretation, evaluation, and combination of Operations and their results.  
 
 `Result.ok` can be used to test whether an OperationResult is successful.
@@ -124,7 +124,7 @@ To faciliate working with Operations and OperationResults, the framework provide
 `Operation.completeAsync` can be used to force an InProcess or Deferred Operation to complete, and returns an `Async<Operation<'result,'event>>` where the Operation returned by the Async is guaranteed to be Completed.
 `Operation.completeTask` can be used to force an InProcess or Deferred Operation to complete, and returns a `Task<Operation<'result,'event>>` where the Task's Result is guaranteed to be a Completed Operation.
 
-####Interoperability
+#### Interoperability
 While the framework aims to make Operations easy to work with and combine to create larger Operations and entire programs, there may ultimately be a point where the program needs to either return a value or throw an exception, such as when interoperating with another library or with a user interface.  In this case, it is recommended to use the `Operation.returnOrFail` function to force evaluation of the Operation and either return the value of the successful result, or throw an exception with the failure events.
 
 ```fsharp
@@ -148,7 +148,7 @@ System.Exception: FileNotFound "C:\Users\userName\AppData\Local\Temp\input.txt"
 
 In this way, an exception with a meaningful message is returned to a user or to a caller from an external system without having to share a library of domain events or convert between domain events and exceptions in both directions.
 
-####Parallel Execution
+#### Parallel Execution
 Similar to Tasks and Async Workflows, Operations can be executed in parallel to offer enhanced performance when multiple operations need to be executed and the operations are not interdependent.  This is accomplished by use of the `Operation.Parallel` function, as in the following example:
 
 ```fsharp
