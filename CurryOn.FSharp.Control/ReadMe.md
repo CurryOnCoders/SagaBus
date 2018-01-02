@@ -8,9 +8,9 @@ open System.IO
 
 let readFile (fileName: string) =
     operation {
-		use fileStream = new StreamReader(fileName)
-		return! fileStream.ReadToEndAsync()
-	}    
+        use fileStream = new StreamReader(fileName)
+        return! fileStream.ReadToEndAsync()
+    }    
 ```
 
 The example above creates a function `val readFile : fileName:string -> Operation<string,exn>` that takes a file name and returns **Operation<string,exn>** representing the result of reading all text from the file.  The Operation type is a discriminated union with four cases:
