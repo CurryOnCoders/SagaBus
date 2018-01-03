@@ -406,23 +406,15 @@ module OperationBuilder =
             bindAsync async continuation
 
 [<AutoOpen>]
-module ContextInsensitive =
-    /// Builds a `System.Threading.Tasks.Task<'a>` similarly to a C# async/await method, but with
-    /// all awaited tasks automatically configured *not* to resume on the captured context.
-    /// This is often preferable when writing library code that is not context-aware, but undesirable when writing
-    /// e.g. code that must interact with user interface controls on the same thread as its caller.
+module OperationBindings =
+    // Bindings for the Operation computation builders
     let operation = OperationBuilder.OperationBuilder()
     let lazy_operation = OperationBuilder.LazyOperationBuilder()
 
-    [<Obsolete("It is no longer necessary to wrap untyped System.Thread.Tasks.Task objects with \"unitTask\".")>]
-    let inline unitTask (t : Task) = t.ConfigureAwait(false)
-
-    // These are fallbacks when the Bind and InProcessStep on the builder object itself don't apply.
-    // This is how we support binding arbitrary task-like types.    
-    [<AutoOpen>]
-    module HigherPriorityBinds =
-        type OperationBuilder.OperationBuilder with
-            member inline this.ReturnFrom(configurableTaskLike) =
-                OperationBuilder.AsyncOperationBinder<_,_>.GenericAwaitNoContext(configurableTaskLike, OperationBuilder.ret)
-            member inline this.Bind(configurableTaskLike, continuation : _ -> OperationBuilder.OperationStep<'result,'event>) : OperationBuilder.OperationStep<'result,'event> =
-                OperationBuilder.AsyncOperationBinder<'result,'event>.GenericAwaitNoContext(configurableTaskLike, continuation)
+    // Fallbacks for when the Bind overloads on the OperationBuilder object itself don't match.
+    // This supports binding arbitrary task-like types in the computation expression.    
+    type OperationBuilder.OperationBuilder with
+        member inline this.ReturnFrom(configurableTaskLike) =
+            OperationBuilder.AsyncOperationBinder<_,_>.GenericAwaitNoContext(configurableTaskLike, OperationBuilder.ret)
+        member inline this.Bind(configurableTaskLike, continuation : _ -> OperationBuilder.OperationStep<'result,'event>) : OperationBuilder.OperationStep<'result,'event> =
+            OperationBuilder.AsyncOperationBinder<'result,'event>.GenericAwaitNoContext(configurableTaskLike, continuation)
