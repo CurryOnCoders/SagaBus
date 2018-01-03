@@ -186,3 +186,10 @@ let fetchUrl (url: string) =
 ```
 
 This returns an `Async<OperationResult<string,exn> []>`.  Passing the result of `Operation.Parallel` into `Async.RunSynchronously` returns an array of results with the HTML strings of each successful request.
+
+## Acknowledgements
+
+This project is based on the [Railway-Oriented Programming](https://fsharpforfunandprofit.com/posts/recipe-part2/) series on [F# for Fun and Profit](https://fsharpforfunandprofit.com/) and previous work available on GitHub:
+
+* Railway-Oriented APIs for working with Result types based on [Chessie](https://github.com/fsprojects/Chessie)
+* Task-Parallel Execution via Computation Expression based on [TaskBuilder.fs](https://github.com/rspeele/TaskBuilder.fs)
