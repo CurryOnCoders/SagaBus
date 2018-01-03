@@ -193,6 +193,13 @@ module OperationBuilder =
     let inline bindAsync (asyncVal: 'a Async) (continuation: 'a -> OperationStep<'b, 'event>) =
         bindTaskNoContext (asyncVal |> Async.StartAsTask) continuation
 
+    /// Special case for binding Lazy<'a> and implicitly creating a Deferred OperationStep
+    let inline bindLazy (lazyVal: 'a Lazy) (continuation: 'a -> OperationStep<'b, 'event>) =
+        if lazyVal.IsValueCreated
+        then lazyVal.Value |> continuation // Short-circuit for already-evaluated lazies
+        else lazy(lazyVal.Value |> continuation) |> EventingLazy |> LazyStep
+
+
     /// Chains together a step with its following step.
     /// Note that this requires that the first step has no result.
     /// This prevents constructs like `operation { return 1; return 2; }`.
@@ -343,6 +350,10 @@ module OperationBuilder =
     let returnTask<'result,'event> (task: Task<'result>) =
         bindTaskNoContext task (fun result -> CompletedStep <| Result.success<'result,'event> result)
 
+    /// Allow Operation computations to return! a Lazy<'result> directly
+    let returnLazy<'result,'event> (lazyVal: Lazy<'result>) =
+        bindLazy lazyVal (fun result -> CompletedStep <| Result.success<'result,'event> result)
+
     type UnitTask =
         struct
             val public Task : Task
@@ -363,6 +374,7 @@ module OperationBuilder =
         member inline __.ReturnFrom(task: Task<'a>) = returnTask<'a,exn> task
         member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
+        member inline __.ReturnFrom(l: _ Lazy) = returnLazy l
         member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
         member inline __.While(condition : unit -> bool, body : unit -> OperationStep<unit,'event>) = whileLoop condition body
         member inline __.For(sequence : _ seq, body : _ -> OperationStep<unit,'event>) = forLoop sequence body
@@ -377,6 +389,8 @@ module OperationBuilder =
             bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
+        member inline __.Bind(laz: 'a Lazy, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
+            bindLazy laz continuation
 
     type LazyOperationBuilder() =
         member inline __.Delay(f : unit -> OperationStep<_,_>) = f
@@ -390,6 +404,7 @@ module OperationBuilder =
         member inline __.ReturnFrom(task: Task<'a>) = returnTask<'a,exn> task
         member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
+        member inline __.ReturnFrom(l: _ Lazy) = returnLazy l
         member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
         member inline __.While(condition : unit -> bool, body : unit -> OperationStep<unit,'event>) = whileLoop condition body
         member inline __.For(sequence : _ seq, body : _ -> OperationStep<unit,'event>) = forLoop sequence body
@@ -404,6 +419,9 @@ module OperationBuilder =
             bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
+        member inline __.Bind(laz: 'a Lazy, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
+            bindLazy laz continuation
+
 
 [<AutoOpen>]
 module OperationBindings =

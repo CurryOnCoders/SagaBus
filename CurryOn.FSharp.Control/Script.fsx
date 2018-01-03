@@ -186,6 +186,19 @@ let myThirdDomainOp =
     }
 
 
+let myLazyBinding =
+    operation {
+        let! x = lazy(3 + rng.Next(0,10))
+        return x * 2
+    }
+
+let myLazyComposedOp = 
+    operation {
+        let! x = myLazyBinding
+        let! y = lazy(rng.Next(0,10))
+        return! lazy(x + y)
+    }
+
 /// ReadMe.md samples
 open System.IO
 
