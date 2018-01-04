@@ -193,6 +193,28 @@ module OperationBuilder =
     let inline bindAsync (asyncVal: 'a Async) (continuation: 'a -> OperationStep<'b, 'event>) =
         bindTaskNoContext (asyncVal |> Async.StartAsTask) continuation
 
+    /// Special case for binding an Async<OperationResult<'a,'b>> directly
+    let bindAsyncResult (asyncVal: Async<OperationResult<'a,'event>>) (continuation: 'a -> OperationStep<'b, 'event>) =
+        let task = 
+            async {
+                let! result = asyncVal
+                match result with
+                | Success successfulResult -> return successfulResult.Result
+                | Failure errors -> return! errors |> Task.FromFailureEvents |> Async.AwaitTask
+            } |> Async.StartAsTask
+        bindTaskNoContext task continuation
+
+    /// Special case for binding an Async<OperationResult<'a,'b> []> directly (supports `let! results = Operation.Parallel operations`)
+    let bindParallel (asyncVal: Async<OperationResult<'a,'event> []>) (continuation: 'a list -> OperationStep<'b, 'event>) =
+        let task = 
+            async {
+                let! results = asyncVal
+                match results |> Result.collect with
+                | Success successfulResult -> return successfulResult.Result
+                | Failure errors -> return! errors |> Task.FromFailureEvents |> Async.AwaitTask
+            } |> Async.StartAsTask
+        bindTaskNoContext task continuation
+
     /// Special case for binding Lazy<'a> and implicitly creating a Deferred OperationStep
     let inline bindLazy (lazyVal: 'a Lazy) (continuation: 'a -> OperationStep<'b, 'event>) =
         if lazyVal.IsValueCreated
@@ -346,6 +368,28 @@ module OperationBuilder =
         | Deferred deferred -> returnOp deferred.Value // Force Evaluation in ReturnFrom
         | Cancelled events -> CompletedStep <| Failure events
 
+    /// Allow Operation computations to reutrn! an Async<OperationResult<'result,'event>> directly
+    let returnAsync<'result,'event> (asyncVal: Async<OperationResult<'result,'event>>) =
+        let rawAsync = 
+            async {
+                let! result = asyncVal
+                match result with
+                | Success successfulResult -> return successfulResult.Result,successfulResult.Events
+                | Failure errors -> return! errors |> Task.FromFailureEvents |> Async.AwaitTask
+            }
+        (Async.StartAsTask >> InProcessStep) rawAsync
+
+    /// Allow Operation computations to reutrn! an Async<OperationResult<'result,'event> []> directly (supports `reutrn! Operation.Parallel operations`)
+    let returnParallel<'result,'event> (asyncVal: Async<OperationResult<'result,'event> []>) =
+        let rawAsync = 
+            async {
+                let! results = asyncVal
+                match results |> Result.collect with
+                | Success successfulResult -> return successfulResult.Result,successfulResult.Events
+                | Failure errors -> return! errors |> Task.FromFailureEvents |> Async.AwaitTask
+            }
+        (Async.StartAsTask >> InProcessStep) rawAsync
+
     /// Allow Operation computations to return! a Task<'result> directly
     let returnTask<'result,'event> (task: Task<'result>) =
         bindTaskNoContext task (fun result -> CompletedStep <| Result.success<'result,'event> result)
@@ -371,6 +415,8 @@ module OperationBuilder =
         member inline __.ReturnFrom(f: OperationResult<_,_>) = CompletedStep f
         member inline __.ReturnFrom(task: _ Task) = InProcessStep task
         member inline __.ReturnFrom(async: _ Async) = (Async.StartAsTask >> InProcessStep) async
+        member inline __.ReturnFrom(async: Async<OperationResult<_,_>>) = returnAsync async
+        member inline __.ReturnFrom(async: Async<OperationResult<_,_> []>) = returnParallel async
         member inline __.ReturnFrom(task: Task<'a>) = returnTask<'a,exn> task
         member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
@@ -389,6 +435,10 @@ module OperationBuilder =
             bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
+        member inline __.Bind(async: Async<OperationResult<'a,'event>>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
+            bindAsyncResult async continuation
+        member inline __.Bind(async: Async<OperationResult<'a,'event> []>, continuation : 'a list -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
+            bindParallel async continuation
         member inline __.Bind(laz: 'a Lazy, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindLazy laz continuation
 
@@ -401,6 +451,8 @@ module OperationBuilder =
         member inline __.ReturnFrom(f: OperationResult<_,_>) = CompletedStep f
         member inline __.ReturnFrom(task : _ Task) = InProcessStep task
         member inline __.ReturnFrom(async: _ Async) = (Async.StartAsTask >> InProcessStep) async
+        member inline __.ReturnFrom(async: Async<OperationResult<_,_>>) = returnAsync async
+        member inline __.ReturnFrom(async: Async<OperationResult<_,_> []>) = returnParallel async
         member inline __.ReturnFrom(task: Task<'a>) = returnTask<'a,exn> task
         member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
         member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
@@ -419,6 +471,10 @@ module OperationBuilder =
             bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
+        member inline __.Bind(async: Async<OperationResult<'a,'event>>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
+            bindAsyncResult async continuation
+        member inline __.Bind(async: Async<OperationResult<'a,'event> []>, continuation : 'a list -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
+            bindParallel async continuation
         member inline __.Bind(laz: 'a Lazy, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindLazy laz continuation
 

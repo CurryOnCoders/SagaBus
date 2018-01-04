@@ -272,3 +272,25 @@ let fetchUrl (url: string) =
  fetchUrl "http://www.github.com";]
 |> Operation.Parallel
 |> Async.RunSynchronously
+
+
+let parallelOp = 
+    operation {
+        return! [fetchUrl "http://www.microsoft.com";
+                 fetchUrl "http://www.google.com";
+                 fetchUrl "http://www.github.com";]
+                |> Operation.Parallel
+    }
+
+let parallelBinding =
+    operation {
+        let! results =
+            [fetchUrl "http://www.microsoft.com";
+             fetchUrl "http://www.google.com";
+             fetchUrl "http://www.github.com";]
+            |> Operation.Parallel
+
+        let z = results |> List.map id
+
+        return ()
+    }
