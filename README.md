@@ -4,7 +4,7 @@ An initiative for building frameworks and packages for F# to enable development 
 ## Projects
 
 ### Curryon.Akka.Persistence.EventStore
-An Akka.net Persistence package for [EventStore](http://geteventstore.com).  Supports the use of EventStore Event Streams as Akka.net Event Journals, where each PersistenceId in Akka.net is a unique stream in EventStore.  Also supports using EventStore as an Akka.net SnapshotStore, creating Snapshot and SnapshotMetadata streams for each Akka.net PersistenceId.  Also implements the standard Akka.net Persistence Query API using EventStore Subscriptions.
+An Akka.net Persistence package for [EventStore](http://geteventstore.com).  Supports the use of EventStore Event Streams as Akka.net Event Journals, where each PersistenceId in Akka.net is a unique stream in EventStore.  Also supports using EventStore as an Akka.net SnapshotStore, creating Snapshot and SnapshotMetadata streams for each Akka.net PersistenceId.  Implements the standard Akka.net Persistence Query API using EventStore Subscriptions.
 
 ### CurryOn.Common
 A library of useful tools for F# development

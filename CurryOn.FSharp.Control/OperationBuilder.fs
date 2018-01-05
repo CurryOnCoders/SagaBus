@@ -347,8 +347,27 @@ module OperationBuilder =
         with | ex -> Completed <| Failure [ex]
 
     /// Lazily Evaluate an OperationStep
-    let runLazyStep (firstStep : unit -> OperationStep<'result,'event>) =
+    let inline runLazyStep (firstStep : unit -> OperationStep<'result,'event>) =
         lazy(run firstStep) |> Operation.defer
+
+    /// Execute an OperationStep in a Task to ensure it runs asynchronously and creates an InProcess peration
+    let rec runAsTask (firstStep : unit -> OperationStep<'result,'event>) =
+        InProcess <| Task.Run(fun () -> run firstStep).ContinueWith(fun (task: Task<Operation<'result,'event>>) ->
+            if task.IsFaulted
+            then Task<'result*'event list>.FromException(task.Exception)
+            elif task.IsCanceled
+            then Task.FromException <| OperationCanceledException()
+            else let rec toTask operation =            
+                     match operation with
+                     | Completed result -> 
+                        match result with
+                        | Success successfulResult -> Task.FromResult(successfulResult.Result,successfulResult.Events)
+                        | Failure errors -> Task.FromFailureEvents errors
+                     | InProcess t -> t
+                     | Cancelled events-> Task.FromFailureEvents events
+                     | Deferred deferred -> toTask deferred.Value
+                 toTask task.Result
+            ).Unwrap()
 
     /// CompletedStep Operations from other Opreations
     let rec returnOp (op: Operation<'result,'event>) =
@@ -406,9 +425,10 @@ module OperationBuilder =
             member this.ConfigureAwait(continueOnCapturedContext) = this.Task.ConfigureAwait(continueOnCapturedContext)
         end
 
-    type OperationBuilder() =
-        member inline __.Delay(f : unit -> OperationStep<_,_>) = f
-        member inline __.Run(f : unit -> OperationStep<'result,'event>) = run f
+    type OperationBuilder () =
+        abstract member Run: (unit -> OperationStep<'result,'event>) -> Operation<'result,'event>
+        default __.Run(f : unit -> OperationStep<'result,'event>) = run f
+        member inline __.Delay(f : unit -> OperationStep<_,_>) = f        
         member inline __.Zero() = zero ()
         member inline __.Return(x) = retEx x
         member inline __.Return(s: SuccessfulResult<_,_>) = ret s
@@ -442,47 +462,19 @@ module OperationBuilder =
         member inline __.Bind(laz: 'a Lazy, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindLazy laz continuation
 
-    type LazyOperationBuilder() =
-        member inline __.Delay(f : unit -> OperationStep<_,_>) = f
-        member inline __.Run(f : unit -> OperationStep<'result,'event>) = runLazyStep f
-        member inline __.Zero() = zero ()
-        member inline __.Return(x) = retEx x
-        member inline __.Return(s: SuccessfulResult<_,_>) = ret s
-        member inline __.ReturnFrom(f: OperationResult<_,_>) = CompletedStep f
-        member inline __.ReturnFrom(task : _ Task) = InProcessStep task
-        member inline __.ReturnFrom(async: _ Async) = (Async.StartAsTask >> InProcessStep) async
-        member inline __.ReturnFrom(async: Async<OperationResult<_,_>>) = returnAsync async
-        member inline __.ReturnFrom(async: Async<OperationResult<_,_> []>) = returnParallel async
-        member inline __.ReturnFrom(task: Task<'a>) = returnTask<'a,exn> task
-        member inline __.ReturnFrom(s: SuccessfulResult<_,_>) = CompletedStep <| Success s
-        member inline __.ReturnFrom(o: Operation<_,_>) = returnOp o
-        member inline __.ReturnFrom(l: _ Lazy) = returnLazy l
-        member inline __.Combine(step : OperationStep<unit,'event>, continuation) = combine step continuation
-        member inline __.While(condition : unit -> bool, body : unit -> OperationStep<unit,'event>) = whileLoop condition body
-        member inline __.For(sequence : _ seq, body : _ -> OperationStep<unit,'event>) = forLoop sequence body
-        member inline __.TryWith(body : unit -> OperationStep<_,_>, catch : exn -> OperationStep<_,_>) = tryWith body catch
-        member inline __.TryFinally(body : unit -> OperationStep<_,_>, fin : unit -> unit) = tryFinally body fin
-        member inline __.Using(disp : #IDisposable, body : #IDisposable -> OperationStep<_,_>) = using disp body
-        member inline __.Bind(task : 'a Task, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindTaskNoContext task continuation
-        member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bind op (fun (result,events) -> continuation result |> mergeEvents <| events)
-        member inline __.Bind(result : OperationResult<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
-        member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
-            bindAsync async continuation
-        member inline __.Bind(async: Async<OperationResult<'a,'event>>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindAsyncResult async continuation
-        member inline __.Bind(async: Async<OperationResult<'a,'event> []>, continuation : 'a list -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindParallel async continuation
-        member inline __.Bind(laz: 'a Lazy, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
-            bindLazy laz continuation
+    type AsyncOperationBuilder () =
+        inherit OperationBuilder()
+        override __.Run(f : unit -> OperationStep<'result,'event>) = runAsTask f
 
+    type LazyOperationBuilder () =
+        inherit OperationBuilder()
+        override __.Run(f : unit -> OperationStep<'result,'event>) = runLazyStep f
 
 [<AutoOpen>]
 module OperationBindings =
     // Bindings for the Operation computation builders
     let operation = OperationBuilder.OperationBuilder()
+    let start_operation = OperationBuilder.AsyncOperationBuilder()
     let lazy_operation = OperationBuilder.LazyOperationBuilder()
 
     // Fallbacks for when the Bind overloads on the OperationBuilder object itself don't match.

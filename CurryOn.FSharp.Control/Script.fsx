@@ -294,3 +294,18 @@ let parallelBinding =
 
         return ()
     }
+
+
+let asyncOp =
+    start_operation {
+        return 
+            while true do
+                if DateTime.Now.Second % 10 = 0
+                then printfn "Still Running"
+                Async.Sleep 1000 |> Async.RunSynchronously
+    }
+
+let anotherOp =
+    operation {
+        return printfn "Executing"
+    }

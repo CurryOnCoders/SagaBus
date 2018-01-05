@@ -19,6 +19,12 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.Tests", "CurryOn.Te
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.FSharp.Control", "CurryOn.FSharp.Control\CurryOn.FSharp.Control.fsproj", "{B8B2E096-C261-45FC-BFBA-0CEA330D6B04}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CurryOn", "CurryOn", "{A4D2896A-E325-4447-B082-5F6423FCBF87}"
+	ProjectSection(SolutionItems) = preProject
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

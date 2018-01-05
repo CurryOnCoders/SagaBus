@@ -187,6 +187,30 @@ let fetchUrl (url: string) =
 
 This returns an `Async<OperationResult<string,exn> []>`.  Passing the result of `Operation.Parallel` into `Async.RunSynchronously` returns an array of results with the HTML strings of each successful request.
 
+#### Asynchronous and Lazy Operations
+By default, Operations start to execute immediatley.  If the Operation Computation contains only synchronous code and does not call any other Operations, it will likely execute fully and return a Completed Operation.  If the Operation Computation calls any Task or Async-returning methods, or if it calls other Operations, the execution of the Operation will be paused while waiting for the Task/Async or the other Operation to complete, and the Computation will generally return an InProcess Operation.  If there is a need to asynchronously start an Operation containing only synchronous code, such as a long-running Operation that should not block the current thread, the `start_operation` Computation can be used instead:
+
+```fsharp
+let asyncOp =
+    start_operation {
+        return 
+            while true do
+                if DateTime.Now.Second % 10 = 0
+                then printfn "Still Running"
+                Async.Sleep 1000 |> Async.RunSynchronously
+    }
+```
+This will start the execution of the Operation in a new Task and immediately return an InProcess Operation, so that it does not block the calling thread.  Similarly, if there is a need to prevent an Operation from executing until the Result is evaluated, the `lazy_operation` Computation can be used.
+
+```fsharp
+let lazyOp =
+    lazy_operation {
+        return DateTime.Now
+    }
+```
+
+This will immediately return a Deferred Operation, and will not be evaluated until `Operation.wait`, `Operation.complete`, or `Operation.returnOrFail` is called.
+
 ## Acknowledgements
 
 This project is based on the [Railway-Oriented Programming](https://fsharpforfunandprofit.com/posts/recipe-part2/) series on [F# for Fun and Profit](https://fsharpforfunandprofit.com/) and previous work available on GitHub:
