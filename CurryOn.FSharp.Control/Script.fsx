@@ -309,3 +309,9 @@ let anotherOp =
     operation {
         return printfn "Executing"
     }
+
+let failedOpTest =
+    operation {
+        failwith "Explode!"
+        return 0
+    }
