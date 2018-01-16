@@ -1,10 +1,52 @@
 ﻿namespace CurryOn.Elastic
 
 open FSharp.Control
+open FSharp.Quotations
+open FSharp.Quotations.DerivedPatterns
+open FSharp.Quotations.Patterns
 open Nest
 open System
 
 module Elasticsearch =
+
+    let rec private getExprValue<'a> (valueExpr: Expr) =
+        match valueExpr with
+        | Int16 i -> Convert.ChangeType(i, typeof<'a>)
+        | Int32 i -> Convert.ChangeType(i, typeof<'a>)
+        | Int64 i -> Convert.ChangeType(i, typeof<'a>)
+        | Single f -> Convert.ChangeType(f, typeof<'a>)
+        | Double f -> Convert.ChangeType(f, typeof<'a>)
+        | Decimal f -> Convert.ChangeType(f, typeof<'a>)
+        | String s -> Convert.ChangeType(s, typeof<'a>)
+        | Patterns.Value (value, valueType) ->
+            if Type.GetTypeCode(valueType) = Type.GetTypeCode(typeof<'a>)
+            then value 
+            else failwithf "Unsupport Value Expression Type: %s" valueExpr.Type.Name
+        | _ -> failwith "Expression was not a Value expression"
+        |> unbox<'a>
+
+    let rec private getFieldName (fieldExpr: Expr) =
+        match fieldExpr with
+        | PropertyGet (_,property,_) -> property.Name
+        | _ -> failwith "Expression Is Not a PropertyGet"
+
+    let rec private parseExpression (expr: Expr) =
+        match expr with
+        | Lambda (_,expression) -> parseExpression expression
+        | SpecificCall <@@ (>) @@> (_,_,expressions) -> 
+            match Type.GetTypeCode(expressions.Head.Type) with
+            | TypeCode.Byte | TypeCode.SByte | TypeCode.Int16 | TypeCode.Int32 | TypeCode.Int64 | TypeCode.UInt16 | TypeCode.UInt32 | TypeCode.UInt64 ->
+                <@ {Field = getFieldName expressions.Head; Term = CurryOn.Elastic.IntegerRange <| {Minimum = Exclusive (getExprValue<int64> expressions.Tail.Head); Maximum = Unbounded}} @>
+            | TypeCode.Single | TypeCode.Double | TypeCode.Decimal ->
+                <@ {Field = getFieldName expressions.Head; Term = DecimalRange <| {Minimum = Exclusive (getExprValue<decimal> expressions.Tail.Head); Maximum = Unbounded}} @>
+            | TypeCode.DateTime ->
+                <@ {Field = getFieldName expressions.Head; Term = CurryOn.Elastic.DateRange <| {Minimum = Exclusive (getExprValue<DateTime> expressions.Tail.Head); Maximum = Unbounded}} @>
+            | TypeCode.String ->
+                <@ {Field = getFieldName expressions.Head; Term = TagRange <| {Minimum = Exclusive (getExprValue<string> expressions.Tail.Head); Maximum = Unbounded}} @>
+            | other ->
+                failwithf "Unsupported Type %s (TypeCode = %A) in Greater-Than Expression" expressions.Head.Type.Name other
+        | _ -> failwith "Expression was not a Lambda or a Known Specific Call"
+        
     
     /// Connects to the specified Elasticsearch Instance with the given settings and returns an IElasticClient
     let connect (settings: ElasticSettings) =
@@ -79,3 +121,9 @@ module Elasticsearch =
     /// Executes a search against the specified Elasticsearch index
     let search<'index when 'index: not struct> (client: CurryOn.Elastic.IElasticClient) request =
         client.Search<'index> request
+
+    /// Executes a search applying the given filter expression to the Elasitcsearch index
+    //let filter<'index when 'index: not struct> (client: CurryOn.Elastic.IElasticClient) (filterExpression: Expr<'index -> bool>) =
+    //    let searchTerm =
+    //        match filterExpression with
+    //        |

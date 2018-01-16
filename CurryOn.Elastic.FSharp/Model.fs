@@ -85,7 +85,7 @@ type FieldTerm =
 | Contains of string
 | Proximity of string*int
 | DateRange of Range<DateTime>
-| IntegerRange of Range<int>
+| IntegerRange of Range<int64>
 | DecimalRange of Range<decimal>
 | TagRange of Range<string>
 | FieldAnd of FieldTerm*FieldTerm
