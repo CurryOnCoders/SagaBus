@@ -132,7 +132,6 @@ type QueryString =
         Term: QueryStringTerm
         DefaultField: string option
         DefaultOperator: Operator option
-        Sort: SearchSort option
     }
 
 type FilterClause =
@@ -331,12 +330,20 @@ type ScoreMode =
         | MinScore -> Nest.ScoreMode.Min
     member internal this.ToNested() =
         match this with
-        | MultiplyScore -> Nest.NestedScoreMode.Multiply
-        | SumScore -> Nest.NestedScoreMode.Total
+        | MultiplyScore -> Nest.NestedScoreMode.None
+        | SumScore -> Nest.NestedScoreMode.Sum
         | AverageScore -> Nest.NestedScoreMode.Average
         | FirstScore -> Nest.NestedScoreMode.None
         | MaxScore -> Nest.NestedScoreMode.Max
         | MinScore -> Nest.NestedScoreMode.Min
+    member internal this.ToFunctionScoreMode() =
+        match this with
+        | MultiplyScore -> Nest.FunctionScoreMode.Multiply
+        | SumScore -> Nest.FunctionScoreMode.Sum
+        | AverageScore -> Nest.FunctionScoreMode.Average
+        | FirstScore -> Nest.FunctionScoreMode.First
+        | MaxScore -> Nest.FunctionScoreMode.Max
+        | MinScore -> Nest.FunctionScoreMode.Min
 
 type BoolQuery =
     {
@@ -436,6 +443,7 @@ type SearchRequest =
     {
         Search: SearchStructure
         Timeout: TimeSpan option
+        Sort: SearchSort option
         From: int option
         Size: int option
     }    
@@ -444,7 +452,6 @@ type ShardInfo =
     {
         Total: int
         Successful: int
-        Skipped: int option
         Failed: int
     }
 
@@ -453,14 +460,14 @@ type Hit<'index when 'index: not struct> =
         Index: string
         Type: string
         Id: DocumentId
-        Score: decimal
+        Score: float option
         Document: 'index
     }
 
 type ResultHits<'index when 'index: not struct> =
     {
         TotalHits: int64
-        MaximumScore: decimal option
+        MaximumScore: float option
         Hits: Hit<'index> list
     }
 
@@ -638,7 +645,8 @@ type IElasticClient =
     abstract member RecreateIndex<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
     abstract member DeleteOldDocuments<'index when 'index: not struct> : DateTime -> Operation<unit, ElasticsearchEvent>
     abstract member Index<'index when 'index: not struct> : IndexRequest<'index> -> Operation<IndexResponse, ElasticsearchEvent>
-    abstract member BulkIndex<'index when 'index: not struct> : IndexRequest<'index> seq -> Operation<BulkIndexResponse, ElasticsearchEvent>
+    abstract member BulkIndex<'index when 'index: not struct and 'index: equality> : IndexRequest<'index> seq -> Operation<BulkIndexResponse, ElasticsearchEvent>
+    abstract member BulkIndex<'index when 'index: not struct> : 'index seq -> Operation<BulkIndexResponse, ElasticsearchEvent>
     abstract member Get<'index when 'index: not struct> : GetRequest<'index> -> Operation<GetResponse<'index>, ElasticsearchEvent>
     abstract member Delete<'index when 'index: not struct> : DeleteRequest<'index> -> Operation<DeleteResponse, ElasticsearchEvent>
     abstract member Update<'index when 'index: not struct> : UpdateRequest<'index> -> Operation<UpdateResponse<'index>, ElasticsearchEvent>

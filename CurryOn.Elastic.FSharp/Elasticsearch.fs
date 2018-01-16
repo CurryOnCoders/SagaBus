@@ -145,6 +145,14 @@ module Elasticsearch =
                     else Result.failure [response |> toError |> IndexingFailed]
         }
 
+    let inline private parseBulkResponse (response: IBulkResponse) =
+        { ElapsedTime = TimeSpan.FromMilliseconds(response.Took |> float)
+          Errors = response.Errors
+          Results = response.Items 
+                  |> Seq.map (fun item -> {Index = item.Index; Type = item.Type; Id = item.Id |> DocumentId.Parse; Version = item.Version; Result = if item.IsValid then Created else IndexError (item.Error |> toBulkError)})
+                  |> Seq.toList
+        }
+
     let internal bulkIndex<'index when 'index: not struct and 'index: equality> (client: ElasticClient) (indexRequests: CurryOn.Elastic.IndexRequest<'index> seq) =
         operation {
             let getId (create: BulkCreateDescriptor<'index>) (document: 'index) =
@@ -158,13 +166,16 @@ module Elasticsearch =
                 descriptor.CreateMany(indexRequests |> Seq.map (fun request -> request.Document), fun bd index -> getId bd index) :> IBulkRequest
             let! response = client.BulkAsync(fun b -> getBulkOperation b)
             return! if response.IsValid 
-                    then let bulkResponse =
-                            { ElapsedTime = TimeSpan.FromMilliseconds(response.Took |> float)
-                              Errors = response.Errors
-                              Results = response.Items 
-                                        |> Seq.map (fun item -> {Index = item.Index; Type = item.Type; Id = item.Id |> DocumentId.Parse; Version = item.Version; Result = if item.IsValid then Created else IndexError (item.Error |> toBulkError)})
-                                        |> Seq.toList
-                            }
+                    then let bulkResponse = response |> parseBulkResponse                            
+                         Result.successWithEvents bulkResponse [BulkDocumentsIndexed]
+                    else Result.failure [response |> toError |> BulkIndexingFailed]
+        }
+
+    let internal bulkIndexDocuments<'index when 'index: not struct> (client: ElasticClient) (documents: 'index seq) =
+        operation {
+            let! response = client.BulkAsync(fun b -> b.CreateMany(documents) :> IBulkRequest)
+            return! if response.IsValid 
+                    then let bulkResponse = response |> parseBulkResponse
                          Result.successWithEvents bulkResponse [BulkDocumentsIndexed]
                     else Result.failure [response |> toError |> BulkIndexingFailed]
         }
@@ -209,7 +220,7 @@ module Elasticsearch =
             return! if response.IsValid
                     then if response.Found
                          then let deleteResponse =
-                                { Index = response.Index
+                                { DeleteResponse.Index = response.Index
                                   Type = response.Type
                                   Id = DocumentId.Parse response.Id
                                   Version = match Int64.TryParse response.Version with
@@ -260,7 +271,7 @@ module Elasticsearch =
                     
             return! if response.IsValid
                     then let updateResponse =
-                            { Shards = {Total = response.ShardsHit.Total; Successful = response.ShardsHit.Successful; Failed = response.ShardsHit.Failed; Skipped = None}
+                            { Shards = {Total = response.ShardsHit.Total; Successful = response.ShardsHit.Successful; Failed = response.ShardsHit.Failed}
                               Index = response.Index
                               Type = response.Type
                               Id = response.Id |> DocumentId.Parse
@@ -604,45 +615,108 @@ module Elasticsearch =
                     | f -> mustNots.Filter(f |> Seq.map (fun q -> applyQueryClause q search) |> Seq.toArray)
                     :> IBoolQuery)
                 | DisMax disMax -> search.DisMax(fun d -> d.Boost(disMax.Boost |> toNullable).TieBreaker(disMax.TieBreaker |> toNullable).Queries(disMax.Queries |> Seq.map (fun q -> applyQueryClause q search) |> Seq.toArray) :> IDisMaxQuery)
-                | FunctionScore functionScore -> search.FunctionScore(fun f -> f.Query(fun q -> applyQueryClause functionScore.Query q).MinScore(functionScore.MinScore |> toNullable).MaxBoost(functionScore.MaxBoost |> toNullable).ScoreMode(functionScore.ScoreMode.ToApi() |> Nullabel).BoostMode(functionScore.BoostMode.ToApi() |> Nullable) :> IFunctionScoreQuery)
+                | FunctionScore functionScore -> search.FunctionScore(fun f -> f.Query(fun q -> applyQueryClause functionScore.Query q).MinScore(functionScore.MinScore |> toNullable).MaxBoost(functionScore.MaxBoost |> toNullable).ScoreMode(functionScore.ScoreMode.ToFunctionScoreMode() |> Nullable).BoostMode(functionScore.BoostMode.ToApi() |> Nullable) :> IFunctionScoreQuery)
                 | Boosting boosting -> search.Boosting(fun b -> b.Negative(fun n -> applyQueryClause boosting.Negative n).Positive(fun p -> applyQueryClause boosting.Positive p).NegativeBoost(boosting.NegativeBoost |> toNullable) :> IBoostingQuery)
                 | Nested nested -> search.Nested(fun n -> n.Path(field nested.Path).Query(fun q -> applyQueryClause nested.Query q).ScoreMode(nested.ScoreMode.ToNested()) :> INestedQuery)
                 | HasChild hasChild -> search.HasChild(fun c -> c.Query(fun q -> applyQueryClause hasChild.Query q).Type(hasChild.Type) :> IHasChildQuery)
                 | HasParent hasParent -> search.HasParent(fun p -> p.Query(fun q -> applyQueryClause hasParent.Query q).Type(hasParent.ParentType) :> IHasParentQuery)
-                | ParentId parentId -> search.ParentId(fun p -> p.Id(parentId.Id.ToId()).Type(parentId.Type) :> IParentIdQuery)
+                | ParentId parentId -> search.ParentId(fun p -> p.Id(parentId.Id.ToId()).Type(typeName parentId.Type) :> IParentIdQuery)
 
             let inline getSearchBody (structure: SearchStructure) (search: SearchDescriptor<'index>) =
                 match structure with
                 | QueryStringQuery queryString ->
-                    let query = search.Query(fun qd -> qd.QueryString(fun qs -> applyQueryString queryString qs))
-                    let rec applySort sort (descriptor: SearchDescriptor<'index>) =
-                        match sort with
-                        | Some sort ->
-                            match sort with
-                            | Field f -> query.Sort(fun sd -> sd.Field(field f, SortOrder.Ascending))
-                            | FieldDirection (f,direction) ->
-                                match direction with
-                                | Ascending -> query.Sort(fun sd -> sd.Ascending(field f))
-                                | Descending -> query.Sort(fun sd -> sd.Descending(field f))
-                            | Multiple sorts -> sorts |> Seq.fold (fun acc cur -> applySort cur acc) query
-                            | Score -> query.Sort(fun sd -> sd.Descending(SortSpecialField.Score))
-                            | Document -> query.Sort(fun sd -> sd.Ascending(SortSpecialField.DocumentIndexOrder))
-                        | None -> query
-                    query |> applySort queryString.Sort |> unbox<ISearchRequest>
-                | RequestBodyQuery requestBody -> search
+                    search.Query(fun qd -> qd.QueryString(fun qs -> qs |> applyQueryString queryString))                    
+                | RequestBodyQuery requestBody -> 
+                    search.Query(fun qd -> qd |> applyQueryClause requestBody)
                     
             let inline getSearch search =
-                let searchBody = getSearchBody request.Search search
+                let rec applySort sort (descriptor: SearchDescriptor<'index>) =
+                    let inline getSortPromise (sort: SortDescriptor<'index>) =
+                        sort :> IPromise<Collections.Generic.IList<ISort>>
+                    match sort with
+                    | Field f -> descriptor.Sort(fun sd -> sd.Field(field f, SortOrder.Ascending) |> getSortPromise)
+                    | FieldDirection (f,direction) ->
+                        match direction with
+                        | Ascending -> descriptor.Sort(fun sd -> sd.Ascending(field f) |> getSortPromise)
+                        | Descending -> descriptor.Sort(fun sd -> sd.Descending(field f) |> getSortPromise)
+                    | Multiple sorts -> sorts |> Seq.fold (fun acc cur -> applySort cur acc) descriptor
+                    | Score -> descriptor.Sort(fun sd -> sd.Descending(SortSpecialField.Score) |> getSortPromise)
+                    | Document -> descriptor.Sort(fun sd -> sd.Ascending(SortSpecialField.DocumentIndexOrder) |> getSortPromise)
 
-                searchBody :> ISearchRequest
+                let searchBody = getSearchBody request.Search search
+                let finalSearch =
+                    match request.From with
+                    | Some from ->
+                        match request.Size with
+                        | Some size ->
+                            match request.Sort with
+                            | Some sort ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.From(from).Size(size).Timeout(sprintf "%fs" timeout.TotalSeconds) |> applySort sort
+                                | None -> searchBody.From(from).Size(size) |> applySort sort
+                            | None ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.From(from).Size(size).Timeout(sprintf "%fs" timeout.TotalSeconds)
+                                | None -> searchBody.From(from).Size(size)
+                        | None ->
+                            match request.Sort with
+                            | Some sort ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.From(from).Timeout(sprintf "%fs" timeout.TotalSeconds) |> applySort sort
+                                | None -> searchBody.From(from) |> applySort sort
+                            | None ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.From(from).Timeout(sprintf "%fs" timeout.TotalSeconds)
+                                | None -> searchBody.From(from)
+                    | None -> 
+                        match request.Size with
+                        | Some size ->
+                            match request.Sort with
+                            | Some sort ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.Size(size).Timeout(sprintf "%fs" timeout.TotalSeconds) |> applySort sort
+                                | None -> searchBody.Size(size) |> applySort sort
+                            | None ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.Size(size).Timeout(sprintf "%fs" timeout.TotalSeconds)
+                                | None -> searchBody.Size(size)
+                        | None ->
+                            match request.Sort with
+                            | Some sort ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.Timeout(sprintf "%fs" timeout.TotalSeconds) |> applySort sort
+                                | None -> searchBody |> applySort sort
+                            | None ->
+                                match request.Timeout with
+                                | Some timeout -> searchBody.Timeout(sprintf "%fs" timeout.TotalSeconds)
+                                | None -> searchBody
+
+                finalSearch :> ISearchRequest
+
 
             let! response = client.SearchAsync<'index>(fun sd -> getSearch sd)
+
+            return! if response.IsValid
+                    then let searchResponse =
+                            { ElapsedTime = response.Took |> float |> TimeSpan.FromMilliseconds
+                              TimedOut = response.TimedOut
+                              Shards = {Total = response.Shards.Total; Failed = response.Shards.Failed; Successful = response.Shards.Successful}
+                              Results = { TotalHits = response.HitsMetaData.Total
+                                          MaximumScore = Some response.HitsMetaData.MaxScore
+                                          Hits = response.Hits 
+                                                 |> Seq.map (fun hit -> {Index = hit.Index; Type = hit.Type; Id = hit.Id |> DocumentId.Parse; Score = hit.Score |> toOption; Document = hit.Source})
+                                                 |> Seq.toList
+                                        }
+                              ScrollId = response.ScrollId
+                            }
+                         Result.successWithEvents searchResponse [SearchExecutedSuccessfully]
+                    else Result.failure [response |> toError |> QueryExecutionError]
         }
 
     let connect (settings: ElasticSettings) =
         let connectionSettings = settings.GetConnectionSettings()
         let client = ElasticClient(connectionSettings)
-        { new IElasticClient with
+        { new CurryOn.Elastic.IElasticClient with
             member __.IndexExists<'index when 'index: not struct> () = indexExists<'index> client
             member __.CreateIndex<'index when 'index: not struct> () = createIndex<'index> client None
             member __.CreateIndex<'index when 'index: not struct> creationRequest = createIndex<'index> client <| Some creationRequest
@@ -650,7 +724,8 @@ module Elasticsearch =
             member __.RecreateIndex<'index when 'index: not struct> () = recreateIndex<'index> client
             member __.DeleteOldDocuments<'index when 'index: not struct> date = deleteOldDocuments<'index> client date
             member __.Index<'index when 'index: not struct> document = index<'index> client document
-            member __.BulkIndex<'index when 'index: not struct> documents = bulkIndex<'index> client documents
+            member __.BulkIndex<'index when 'index: not struct and 'index: equality> (requests: CurryOn.Elastic.IndexRequest<'index> seq) = bulkIndex<'index> client requests
+            member __.BulkIndex<'index when 'index: not struct> (documents: 'index seq) = bulkIndexDocuments<'index> client documents
             member __.Get<'index when 'index: not struct> request = get<'index> client request
             member __.Delete<'index when 'index: not struct> request = delete<'index> client request
             member __.Update<'index when 'index: not struct> request = update<'index> client request

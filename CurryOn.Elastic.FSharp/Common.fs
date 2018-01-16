@@ -10,6 +10,11 @@ module internal Common =
         | Some v -> Nullable v
         | None -> Nullable<'a>()
 
+    let inline toOption<'a when 'a: struct and 'a :> ValueType and 'a: (new: unit -> 'a)> (nullable: Nullable<'a>) =
+        if nullable.HasValue
+        then Some nullable.Value
+        else None
+
     let isNotNull<'a when 'a: null> = isNull<'a> >> not
 
     let getCaseName (x: 'a) = 
