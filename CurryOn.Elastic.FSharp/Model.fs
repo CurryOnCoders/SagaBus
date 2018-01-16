@@ -638,16 +638,29 @@ type ElasticsearchEvent =
 
 type IElasticClient =
     inherit IDisposable
+    /// Checks to see if an index for the given type already exists in Elasticsearch
     abstract member IndexExists<'index when 'index: not struct> : unit -> Operation<bool, ElasticsearchEvent>
+    /// Creates an index for the given type in the Elasticsearch repository
     abstract member CreateIndex<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
+    /// Creates an index for the given type with the specified parameters in the Elasticsearch repository
     abstract member CreateIndex<'index when 'index: not struct> : CreateIndexRequest<'index> -> Operation<unit, ElasticsearchEvent>
+    /// Deletes the the index for the given type and all documents contained therein from Elasticsearch
     abstract member DeleteIndex<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
+    /// Deletes and Recreates the index for the given type in Elasticsearch
     abstract member RecreateIndex<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
+    /// Deletes all documents in the index for the given type older than the specified date
     abstract member DeleteOldDocuments<'index when 'index: not struct> : DateTime -> Operation<unit, ElasticsearchEvent>
+    /// Indexes the given document, adding it to Elasticsearch
     abstract member Index<'index when 'index: not struct> : IndexRequest<'index> -> Operation<IndexResponse, ElasticsearchEvent>
+    /// Bulk-Indexes all given documents, adding them to Elasticsearch using the specified IDs and metadata
     abstract member BulkIndex<'index when 'index: not struct and 'index: equality> : IndexRequest<'index> seq -> Operation<BulkIndexResponse, ElasticsearchEvent>
+    /// Bulk-Indxes all given documents, adding them to Elasticsearch with dynamically generated IDs and metadata
     abstract member BulkIndex<'index when 'index: not struct> : 'index seq -> Operation<BulkIndexResponse, ElasticsearchEvent>
+    /// Retrieves the document with the specified ID from the Elasticsearch index
     abstract member Get<'index when 'index: not struct> : GetRequest<'index> -> Operation<GetResponse<'index>, ElasticsearchEvent>
+    /// Deletes the specified document from the Elasticsearch index
     abstract member Delete<'index when 'index: not struct> : DeleteRequest<'index> -> Operation<DeleteResponse, ElasticsearchEvent>
+    /// Updates the specified document in the Elasticsearch index, performing either a scripted update, field-level updates, or an Upsert
     abstract member Update<'index when 'index: not struct> : UpdateRequest<'index> -> Operation<UpdateResponse<'index>, ElasticsearchEvent>
+    /// Executes a search against the specified Elasticsearch index
     abstract member Search<'index when 'index: not struct> : SearchRequest -> Operation<SearchResult<'index>, ElasticsearchEvent>

@@ -53,8 +53,9 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Common.fs" />
     <Compile Include="Model.fs" />
-    <Compile Include="Elasticsearch.fs" />
+    <Compile Include="Elastic.fs" />
     <Compile Include="SearchBuilder.fs" />
+    <Compile Include="Elasticsearch.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>
