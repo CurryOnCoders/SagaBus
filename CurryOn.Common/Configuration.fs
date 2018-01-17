@@ -1,5 +1,6 @@
 ﻿namespace CurryOn.Common
 
+open FSharp.Control
 open System
 open System.Configuration
 
@@ -19,10 +20,10 @@ module Configuration =
 
     let SectionName = ContextConfigurationSection.SectionName
     let load () =
-        attempt {
+        operation {
             return ConfigurationManager.GetSection(SectionName) |> unbox<IConfiguration>
         }
     let Common = 
-        match load() with
-        | Success config -> config
+        match load() |> Operation.wait with
+        | Success success -> success.Result
         | Failure _ -> new ContextConfigurationSection() :> IConfiguration

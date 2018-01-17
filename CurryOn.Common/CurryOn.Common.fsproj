@@ -58,11 +58,9 @@
     <Compile Include="Utils.fs" />
     <Compile Include="Measures.fs" />
     <Compile Include="Extensions.fs" />
-    <Compile Include="Result.fs" />
     <Compile Include="Configuration.fs" />
     <Compile Include="Lazy.fs" />
     <Compile Include="Task.fs" />
-    <Compile Include="Async.fs" />
     <Compile Include="Patterns.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Linq.fs" />
@@ -86,6 +84,13 @@
       <HintPath>..\Samples\CurryOn.Blog\packages\System.ValueTuple.4.4.0-preview2-25405-01\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
     </Reference>
     <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CurryOn.FSharp.Control\CurryOn.FSharp.Control.fsproj">
+      <Name>CurryOn.FSharp.Control</Name>
+      <Project>{b8b2e096-c261-45fc-bfba-0cea330d6b04}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

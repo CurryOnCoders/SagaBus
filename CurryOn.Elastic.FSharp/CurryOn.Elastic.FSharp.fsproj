@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Common.fs" />
+    <Compile Include="Attributes.fs" />
     <Compile Include="Model.fs" />
     <Compile Include="Elastic.fs" />
     <Compile Include="SearchBuilder.fs" />

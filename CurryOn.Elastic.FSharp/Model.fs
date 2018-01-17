@@ -488,12 +488,17 @@ type ElasticsearchServerError =
         Cause: ElasticsearchServerError option
     }
 
+exception ElasticsearchError of string
+
 type ElasticError =
     {
         Status: int
         OriginalException: exn option
         Error: ElasticsearchServerError
-    }
+    } member this.ToException () =
+        match this.OriginalException with
+        | Some ex -> ex
+        | None -> ElasticsearchError <| this.Error.Reason
 
 type ElasticIndexResult =
     | Created
@@ -606,35 +611,67 @@ type BulkIndexResponse =
         Errors: bool
         Results: IndexResponse list
     }
+
+type DeleteByQueryResponse =
+    {
+        ElapsedTime: TimeSpan
+        TimedOut: bool
+        TotalMatchingQuery: int64
+        Deleted: int64
+        Failed: int64
+    }
     
+exception IdConflictError of DocumentId
+exception VersionConflictError of int64*int64
+
 type ElasticsearchEvent =
-| IndexCreated
-| IndexAlreadyExists
-| IndexCreationFailed of ElasticError
-| IndexDeleted
-| IndexDoesNotExist
-| IndexExistsFailed of ElasticError
-| IndexDeletionFailed of ElasticError
-| DocumentIndexed
-| DocumentAlreadyIndexed
-| IndexingFailed of ElasticError
-| IdConflit of DocumentId
-| BulkDocumentsIndexed
-| BulkIndexingFailed of ElasticError
-| OldDocumentsDeleted
-| DeletingOldDocumentsFailed of ElasticError
-| DocumentUpdated
-| VersionConflict of int64*int64
-| UpdateFailed of ElasticError
-| DocumentRetrieved
-| DocumentNotFound
-| GetDocumentFailed of ElasticError
-| DocumentDeleted
-| DeleteFailed of ElasticError
-| SearchExecutedSuccessfully
-| QueryParseError of ElasticError
-| QueryExecutionError of ElasticError
-| UnhandledException of exn
+    | IndexCreated
+    | IndexAlreadyExists
+    | IndexCreationFailed of ElasticError
+    | IndexDeleted
+    | IndexDoesNotExist
+    | IndexExistsFailed of ElasticError
+    | IndexDeletionFailed of ElasticError
+    | DocumentIndexed
+    | DocumentAlreadyIndexed
+    | IndexingFailed of ElasticError
+    | IdConflict of DocumentId
+    | BulkDocumentsIndexed
+    | BulkIndexingFailed of ElasticError
+    | OldDocumentsDeleted
+    | DeletingOldDocumentsFailed of ElasticError
+    | DocumentUpdated
+    | VersionConflict of int64*int64
+    | UpdateFailed of ElasticError
+    | DocumentRetrieved
+    | DocumentNotFound
+    | GetDocumentFailed of ElasticError
+    | DocumentDeleted
+    | DeleteFailed of ElasticError
+    | SearchExecutedSuccessfully
+    | QueryParseError of ElasticError
+    | QueryExecutionError of ElasticError
+    | QueryResultsDeleted
+    | DeleteByQueryFailed of ElasticError
+    | UnhandledException of exn
+    member this.ToException () =
+        match this with
+        | IndexCreationFailed error -> error.ToException() |> Some
+        | IndexExistsFailed error -> error.ToException() |> Some
+        | IndexDeletionFailed error -> error.ToException() |> Some
+        | IndexingFailed error -> error.ToException() |> Some
+        | IdConflict id -> IdConflictError id |> Some
+        | BulkIndexingFailed error -> error.ToException() |> Some
+        | DeletingOldDocumentsFailed error -> error.ToException() |> Some
+        | VersionConflict (oldVersion,newVersion) -> VersionConflictError (oldVersion,newVersion) |> Some
+        | UpdateFailed error -> error.ToException() |> Some
+        | GetDocumentFailed error -> error.ToException() |> Some
+        | DeleteFailed error -> error.ToException() |> Some
+        | QueryParseError error -> error.ToException() |> Some
+        | QueryExecutionError error -> error.ToException() |> Some
+        | DeleteByQueryFailed error -> error.ToException() |> Some
+        | UnhandledException ex -> ex |> Some
+        | _ -> None
 
 type IElasticClient =
     inherit IDisposable
@@ -650,6 +687,8 @@ type IElasticClient =
     abstract member RecreateIndex<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
     /// Deletes all documents in the index for the given type older than the specified date
     abstract member DeleteOldDocuments<'index when 'index: not struct> : DateTime -> Operation<unit, ElasticsearchEvent>
+    /// Deletes all documents in the index that match the given query
+    abstract member DeleteByQuery<'index when 'index: not struct> : SearchRequest -> Operation<DeleteByQueryResponse, ElasticsearchEvent>
     /// Indexes the given document, adding it to Elasticsearch
     abstract member Index<'index when 'index: not struct> : IndexRequest<'index> -> Operation<IndexResponse, ElasticsearchEvent>
     /// Bulk-Indexes all given documents, adding them to Elasticsearch using the specified IDs and metadata

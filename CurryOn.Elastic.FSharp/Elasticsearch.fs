@@ -64,6 +64,7 @@ module Elasticsearch =
             member __.BulkIndex<'index when 'index: not struct> (documents: 'index seq) = Elastic.bulkIndexDocuments<'index> client documents
             member __.Get<'index when 'index: not struct> request = Elastic.get<'index> client request
             member __.Delete<'index when 'index: not struct> request = Elastic.delete<'index> client request
+            member __.DeleteByQuery<'index when 'index: not struct> query = Elastic.deleteByQuery client query
             member __.Update<'index when 'index: not struct> request = Elastic.update<'index> client request
             member __.Search<'index when 'index: not struct> request = Elastic.search<'index> client request
             member __.Dispose () =
@@ -121,6 +122,11 @@ module Elasticsearch =
     /// Executes a search against the specified Elasticsearch index
     let search<'index when 'index: not struct> (client: CurryOn.Elastic.IElasticClient) request =
         client.Search<'index> request
+
+    /// Deletes all documents in the index that match the given query
+    let deleteByQuery<'index when 'index: not struct> (client: CurryOn.Elastic.IElasticClient) query =
+        client.DeleteByQuery<'index> query
+
 
     /// Executes a search applying the given filter expression to the Elasitcsearch index
     //let filter<'index when 'index: not struct> (client: CurryOn.Elastic.IElasticClient) (filterExpression: Expr<'index -> bool>) =

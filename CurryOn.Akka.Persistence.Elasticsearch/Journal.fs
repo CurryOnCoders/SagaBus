@@ -1,16 +1,14 @@
-﻿namespace Akka.Persistence.EventStore
+﻿namespace Akka.Persistence.Elasticsearch
 
 open Akka.Actor
 open Akka.Configuration
 open Akka.Persistence
-open Akka.Persistence.EventStore
 open Akka.Persistence.Journal
 open Akka.Streams
 open Akka.Streams.Dsl
 open CurryOn.Common
+open CurryOn.Elastic
 open FSharp.Control
-open EventStore.ClientAPI
-open Microsoft.VisualStudio.Threading
 open System
 open System.Collections.Immutable
 open System.Threading
@@ -19,62 +17,76 @@ open System.Threading.Tasks
 module internal EventJournal =
     let searchForType = memoize <| Types.findType        
 
-    let getEventType (resolvedEvent: ResolvedEvent) =
-        let eventType = resolvedEvent.Event.EventType
-        searchForType eventType |> Operation.returnOrFail
+    let getEventType (persistedEvent: PersistedEvent) =
+        searchForType persistedEvent.EventType |> Operation.returnOrFail
 
-    let deserialize (serialization: EventStoreSerialization) (eventType: Type) (event: RecordedEvent) =
+    let deserialize (serialization: ElasticsearchSerialization) (eventType: Type) (event: PersistedEvent) =
         let deserializer = serialization.GetType().GetMethod("Deserialize").MakeGenericMethod(eventType)
         deserializer.Invoke(serialization, [|event|])
 
-    let deserializeEvent (serialization: EventStoreSerialization) (resolvedEvent: ResolvedEvent) =
-        let eventType = resolvedEvent |> getEventType
-        resolvedEvent.Event |> deserialize serialization eventType
-
-type EventStoreJournal (config: Config) = 
+type ElasticsearchJournal (config: Config) = 
     inherit AsyncWriteJournal()
     let context = AsyncWriteJournal.Context
-    let plugin = EventStorePlugin(context)
+    let plugin = ElasticsearchPlugin(context)
     let writeBatchSize = lazy(config.GetInt("write-batch-size"))
     let readBatchSize = lazy(config.GetInt("read-batch-size"))
     let connect () = plugin.Connect () 
 
     override this.WriteMessagesAsync messages =
         task {
-            let! eventStore = connect()
-            let tasks = messages 
-                        |> Seq.map (fun message ->
-                            let persistentMessages =  message.Payload |> unbox<IImmutableList<IPersistentRepresentation>> 
-                            let events = persistentMessages |> Seq.map (fun persistentMessage ->
-                                let eventType = persistentMessage.Payload |> getTypeName
-                                let tags = 
-                                    match persistentMessage |> box with
-                                    | :? Tagged as tagged -> tagged.Tags |> Seq.toArray
-                                    | _ -> [||] 
-                                let eventMetadata = {EventType = persistentMessage.Payload |> getFullTypeName; Sender = persistentMessage.Sender; Size = message.Size; Tags = tags}
-                                plugin.Serialization.Serialize persistentMessage.Payload (Some eventType) eventMetadata)
-                            let expectedVersion =
-                                let sequenceNumber = message.LowestSequenceNr - 1L
-                                if sequenceNumber = 0L
-                                then ExpectedVersion.NoStream |> int64
-                                else sequenceNumber - 1L
-                            eventStore.AppendToStreamAsync(message.PersistenceId, expectedVersion, plugin.Credentials, events |> Seq.toArray))
-                        |> Seq.toArray            
-            try 
-                let! results = Task.WhenAll(tasks)
-                return null
-            with | ex ->
-                let errors = [ex]@(tasks |> Array.filter (fun task -> task.IsFaulted) |> Array.map (fun task -> task.Exception) |> Seq.cast<exn> |> Seq.toList)
-                return ImmutableList.CreateRange(errors) :> IImmutableList<exn>
+            let client = connect()
+            let indexOperations = 
+                messages 
+                |> Seq.map (fun message ->
+                    operation {
+                        let persistentMessages =  message.Payload |> unbox<IImmutableList<IPersistentRepresentation>> 
+                        let events = persistentMessages |> Seq.map (fun persistentMessage ->
+                            let eventType = persistentMessage.Payload |> getTypeName
+                            let tags = 
+                                match persistentMessage |> box with
+                                | :? Tagged as tagged -> tagged.Tags |> Seq.toArray
+                                | _ -> [||] 
+                            { PersistenceId = persistentMessage.PersistenceId 
+                              EventType = persistentMessage.Payload |> getFullTypeName
+                              Sender = persistentMessage.Sender
+                              SequenceNumber = persistentMessage.SequenceNr
+                              Event = persistentMessage.Payload |> Serialization.toJson
+                              WriterId = persistentMessage.WriterGuid
+                              Tags = tags}) |> Seq.toList
+                        match events with
+                        | [] -> 
+                            return! Result.success List<DocumentId>.Empty
+                        | [event] ->
+                            let! result = client.Index({ Id = None; Document = event})
+                            return! Result.success [result.Id]
+                        | events -> 
+                            let! result = client.BulkIndex(events)
+                            return! result.Results |> List.map (fun r -> r.Id) |> Result.success
+                    })          
+                |> Operation.Parallel
+        
+            let! results = indexOperations |> Async.StartAsTask
+            let errors = results |> Array.fold (fun acc cur ->
+                match cur with
+                | Success _ -> acc
+                | Failure events -> 
+                    let exceptions = 
+                        events 
+                        |> List.map (fun event -> event.ToException()) 
+                        |> List.filter (fun opt -> opt.IsSome) 
+                        |> List.map (fun opt -> opt.Value)
+                    acc @ exceptions) List<exn>.Empty
+            return ImmutableList.CreateRange(errors) :> IImmutableList<exn>
         }
 
     override this.DeleteMessagesToAsync (persistenceId, sequenceNumber) =
         task {
-            let! eventStore = connect()
-            let! metadataResult = eventStore.GetStreamMetadataAsync(persistenceId, plugin.Credentials)
-            let metadata = metadataResult.StreamMetadata
-            let newMetadata = StreamMetadata.Create(metadata.MaxCount, metadata.MaxAge, sequenceNumber |> Nullable, metadata.CacheControl, metadata.Acl)
-            return! eventStore.SetStreamMetadataAsync(persistenceId, metadataResult.MetastreamVersion, newMetadata, plugin.Credentials)
+            let client = connect()
+            let query = Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId
+                        |> Query.combine And (Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> Unbounded (Inclusive sequenceNumber))
+                        |> Query.build
+                        |> Search.build None None None None
+            let! result = client.DeleteByQuery(query) |> Operation.waitTask
         } :> Task
 
     override this.ReadHighestSequenceNrAsync (persistenceId, from) =

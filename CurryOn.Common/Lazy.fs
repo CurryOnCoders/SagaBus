@@ -8,7 +8,7 @@ module private LazyMonad =
 
     let identity<'t> (v: 't) = lazy(v)
 
-    let unit () = Success ()
+    let unit () = lazy ()
 
     let delay<'t> (f: unit -> Lazy<'t>) = 
         (fun () -> lazy (f().Value))

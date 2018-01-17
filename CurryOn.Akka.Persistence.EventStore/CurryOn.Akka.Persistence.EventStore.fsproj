@@ -132,6 +132,11 @@
       <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\CurryOn.FSharp.Control\CurryOn.FSharp.Control.fsproj">
+      <Name>CurryOn.FSharp.Control</Name>
+      <Project>{b8b2e096-c261-45fc-bfba-0cea330d6b04}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
