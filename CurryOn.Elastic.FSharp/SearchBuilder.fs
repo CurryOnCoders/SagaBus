@@ -5,9 +5,10 @@ open FSharp.Quotations
 open FSharp.Quotations.Patterns
 open Nest
 
-module internal Core =
-    let inline getFieldName getField =
+module FieldExpr =
+    let rec getFieldName getField =
         match getField with
+        | Lambda (var,expr) -> getFieldName expr
         | PropertyGet (_,property,_) ->
             match property.GetCustomAttributes(typeof<ElasticsearchPropertyAttributeBase>, true) with
             | [||] -> property.Name
@@ -25,7 +26,7 @@ module internal Core =
 module Sort =
     /// Sort by the specified field in the given direction
     let inline field<'index, 'field when 'index: not struct> direction (getField: Expr<'index -> 'field>) =
-        FieldDirection (Core.getFieldName getField, direction)
+        FieldDirection (FieldExpr.getFieldName getField, direction)
 
     /// Sort by the specified field ascending
     let inline ascending<'index, 'field when 'index: not struct> getField =
@@ -62,11 +63,11 @@ module Search =
 module Query =    
     /// Search for a specific field that contains the given value
     let inline field<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) (value: 'field) =
-        FieldValue <| Core.fieldContains getField (value.ToString())
+        FieldValue <| FieldExpr.fieldContains getField (value.ToString())
 
     /// Search for a field with a value in the specified integer range
     let inline range<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) (min: int64 RangeTerm) (max: int64 RangeTerm) =
-        FieldValue <| Core.fieldRange getField (CurryOn.Elastic.IntegerRange <| {Minimum = min; Maximum = max})
+        FieldValue <| FieldExpr.fieldRange getField (CurryOn.Elastic.IntegerRange <| {Minimum = min; Maximum = max})
 
     /// Combine the given Query terms using the provided Operator (AND/OR)
     let inline combine operator query1 query2 =
