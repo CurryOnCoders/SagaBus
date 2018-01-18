@@ -55,6 +55,7 @@
     <Compile Include="Model.fs" />
     <Compile Include="Plugin.fs" />
     <Compile Include="Journal.fs" />
+    <Compile Include="SnapshotStore.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>

@@ -4,6 +4,7 @@ open FSharp.Control
 open FSharp.Quotations
 open FSharp.Quotations.Patterns
 open Nest
+open System
 
 module FieldExpr =
     let rec getFieldName getField =
@@ -69,11 +70,23 @@ module Query =
     let inline range<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) (min: int64 RangeTerm) (max: int64 RangeTerm) =
         FieldValue <| FieldExpr.fieldRange getField (CurryOn.Elastic.IntegerRange <| {Minimum = min; Maximum = max})
 
+    /// Search for a field with a value in the specified integer range
+    let inline dateRange<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) (min: DateTime RangeTerm) (max: DateTime RangeTerm) =
+        FieldValue <| FieldExpr.fieldRange getField (CurryOn.Elastic.DateRange <| {Minimum = min; Maximum = max})
+
     /// Combine the given Query terms using the provided Operator (AND/OR)
     let inline combine operator query1 query2 =
         match operator with
         | And -> QueryAnd (query1, query2)
         | Or -> QueryOr (query1, query2)
+
+    /// Combine the given Query terms using the AND operator
+    /// Note: They keyword 'and' is reserved by F#, so this function must start with an uppercase letter
+    let And = combine And
+        
+    /// Combine the given Query terms using the OR operator
+    /// Note: They keyword 'or' is reserved by F#, so this function must start with an uppercase letter
+    let Or = combine Or
         
     /// Create an Elasticsearch Query String Query from the provided term
     let inline build term =

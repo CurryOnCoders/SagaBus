@@ -30,11 +30,10 @@ type ElasticsearchJournal (config: Config) =
     let plugin = ElasticsearchPlugin(context)
     let writeBatchSize = lazy(config.GetInt("write-batch-size"))
     let readBatchSize = lazy(config.GetInt("read-batch-size"))
-    let connect () = plugin.Connect () 
+    let client = plugin.Connect () 
 
     override this.WriteMessagesAsync messages =
         task {
-            let client = connect()
             let indexOperations = 
                 messages 
                 |> Seq.map (fun message ->
@@ -81,19 +80,17 @@ type ElasticsearchJournal (config: Config) =
 
     override this.DeleteMessagesToAsync (persistenceId, sequenceNumber) =
         task {
-            let client = connect()
             return! Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> Unbounded (Inclusive sequenceNumber)
-                    |> Query.combine And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
+                    |> Query.And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
                     |> Query.delete client None None None None
                     |> SearchOperation.toTask
         } :> Task
 
     override this.ReadHighestSequenceNrAsync (persistenceId, from) =
         task {
-            let client = connect()
             let! result = 
                 Query.field<PersistedEvent, string> <@ fun event -> event.PersistenceId @> persistenceId
-                |> Query.combine And (Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> (Inclusive from) Unbounded)
+                |> Query.And (Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> (Inclusive from) Unbounded)
                 |> Query.first<PersistedEvent> client None (Sort.descending <@ fun event -> event.SequenceNumber @>)
                 |> Operation.waitTask
             return match result with
@@ -103,10 +100,9 @@ type ElasticsearchJournal (config: Config) =
    
     override this.ReplayMessagesAsync (context, persistenceId, first, last, max, recoveryCallback) =
         task {
-            let client = connect()
             let! result =
                 Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> (Inclusive first) (Inclusive last)
-                |> Query.combine And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
+                |> Query.And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
                 |> Query.execute<PersistedEvent> client None None None (max |> int |> Some)
                 |> SearchOperation.toTask
             for hit in result.Results.Hits do
