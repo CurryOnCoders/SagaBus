@@ -28,6 +28,7 @@ module Elasticsearch =
 
     let rec private getFieldName (fieldExpr: Expr) =
         match fieldExpr with
+        | Lambda (var,expr) -> getFieldName expr
         | PropertyGet (_,property,_) -> property.Name
         | _ -> failwith "Expression Is Not a PropertyGet"
 

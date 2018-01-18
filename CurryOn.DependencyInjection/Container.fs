@@ -1,6 +1,7 @@
 ﻿namespace CurryOn.Core
 
 open CurryOn.Common
+open FSharp.Control
 open System
 open System.Collections.Concurrent
 open System.IO
@@ -14,12 +15,12 @@ type TypeName =
     static member New: string -> string<TypeName> = fun value -> {Value = value}
 
 type IContainer =
-    abstract member InstanceOf<'c when 'c :> IComponent> : unit   -> 'c Result
-    abstract member InstanceOf<'c when 'c :> IComponent> : obj [] -> 'c Result
-    abstract member RegisterSingleton<'c when 'c :> IComponent> : 'c -> Result
-    abstract member RegisterFactory<'c when 'c :> IComponent> : (unit -> 'c) -> Result
-    abstract member RegisterConstructor<'c when 'c :> IComponent> : ConstructorInfo -> Result
-    abstract member GetNamedType : string<TypeName> -> Type Result
+    abstract member InstanceOf<'c when 'c :> IComponent> : unit   -> Operation<'c,exn>
+    abstract member InstanceOf<'c when 'c :> IComponent> : obj [] -> Operation<'c,exn>
+    abstract member RegisterSingleton<'c when 'c :> IComponent> : 'c -> Operation<unit,exn>
+    abstract member RegisterFactory<'c when 'c :> IComponent> : (unit -> 'c) -> Operation<unit,exn>
+    abstract member RegisterConstructor<'c when 'c :> IComponent> : ConstructorInfo -> Operation<unit,exn>
+    abstract member GetNamedType : string<TypeName> -> Operation<Type,exn>
 
 type TypeInjector<'c when 'c :> IComponent> =
 | Singleton of 'c
@@ -44,7 +45,7 @@ module Context =
     let private binaryDirectories = [Environment.CurrentDirectory; Configuration.Common.AssemblySearchPath;] |> List.map DirectoryInfo
 
     let private registerTypeInjector<'c when 'c :> IComponent> (injector: TypeInjector<IComponent>) = 
-        attempt {
+        operation {
             typeInjectors.AddOrUpdate(typeof<'c>, injector, (fun _ _ -> injector)) |> ignore
         }
 
@@ -58,7 +59,7 @@ module Context =
         ctor |> Constructor |> registerTypeInjector<'c>
 
     let private loadAssemblies = memoize <| fun () ->
-        attempt {
+        operation {
             return AppDomain.CurrentDomain.GetAssemblies()
                    |> Seq.append (binaryDirectories 
                                   |> Seq.collect (fun dir -> dir.EnumerateFiles("*.dll", SearchOption.TopDirectoryOnly)) 
@@ -68,7 +69,7 @@ module Context =
         }         
         
     let internal getAllKnownTypes = memoize <| fun () ->
-        attempt {
+        operation {
             let! assembiles = loadAssemblies()
             return assembiles |> Seq.collect (fun assembly -> assembly.GetTypes())
                               |> Seq.distinctBy (fun t -> t.FullName)
@@ -81,19 +82,22 @@ module Context =
         knownType.Name = typeName.Value
     
     let getNamedType (typeName: string<TypeName>) =
-        attempt {
+        operation {
             let! knownTypes = getAllKnownTypes ()
-            return! knownTypes |> List.tryFind (fun knownType -> isNamedType knownType typeName) |> Option.toResult
+            return!
+                match knownTypes |> List.tryFind (fun knownType -> isNamedType knownType typeName) with
+                | Some foundType -> Result.success foundType
+                | None -> Result.failure [exn <| sprintf "No Type with Name Matching '%s' Found" typeName.Value]
         }
             
     let getInjectionTypeCandidates = memoize <| fun (injectionType: Type) ->
-        attempt {
+        operation {
             let! knownTypes = getAllKnownTypes ()
             return knownTypes |> List.filter injectionType.IsAssignableFrom            
         }
 
     let private getConstructors = memoize <| fun (types: Type list, condition) ->  // Note: Must use tuples for multi-parameter memoization
-        attempt {
+        operation {
             return types |> List.map (fun candidateType -> 
                 (candidateType, candidateType.GetConstructors() 
                                 |> Seq.tryFind (fun ctor -> ctor.GetParameters() |> condition)))
@@ -122,7 +126,7 @@ module Context =
             else false))
 
     let rec getBestMatchForTypeInjection<'injectionType when 'injectionType :> IComponent> (optionalParameters: obj [] option) =
-        attempt {
+        operation {
             let injectionType = typeof<'injectionType>
             let! candidateTypes = getInjectionTypeCandidates injectionType
             match optionalParameters with
@@ -134,7 +138,7 @@ module Context =
                     |> List.map (fun (t, ctor) -> (t, ctor.Value))
 
                 if candidatesWithConstructors |> List.isEmpty
-                then return! Failure (exn <| sprintf "No Type Implementing %s with parameters [%s] Could be Found" injectionType.Name (String.Join(", ", (parameters |> Array.map (fun p -> p.GetType().Name)))))
+                then return! Failure [exn <| sprintf "No Type Implementing %s with parameters [%s] Could be Found" injectionType.Name (String.Join(", ", (parameters |> Array.map (fun p -> p.GetType().Name))))]
                 else let (bestMatch, ctor) = candidatesWithConstructors.Head
                      return Factory <| fun () -> parameters |> ctor.Invoke |> unbox<IComponent>
             | None ->
@@ -159,7 +163,7 @@ module Context =
                               |> List.map (fun (t, ctor) -> (t, ctor.Value))
 
                           if candidatesWithConfigurationConstructors |> List.isEmpty
-                          then return! Failure (exn <| sprintf "No Type Implementing %s Could be Found" injectionType.Name)
+                          then return! Failure [exn <| sprintf "No Type Implementing %s Could be Found" injectionType.Name]
                           else let (bestMatch, ctor) = candidatesWithContainerConstructors.Head
                                return Factory <| fun () -> ctor.Invoke [| Configuration.Common |] |> unbox<IComponent>
                      else let (bestMatch, ctor) = candidatesWithContainerConstructors.Head
@@ -171,21 +175,13 @@ module Context =
     and Container = 
         {new IContainer with
             member __.InstanceOf<'c when 'c :> IComponent> () =
-                attempt {
-                    let injector = typeInjectors.GetOrAdd(typeof<'c>, (fun _ -> 
-                        let injectorResult = getBestMatchForTypeInjection<'c> None
-                        match injectorResult with
-                        | Success injector -> injector
-                        | Failure ex -> raise ex))
+                operation {
+                    let injector = typeInjectors.GetOrAdd(typeof<'c>, (fun _ -> getBestMatchForTypeInjection<'c> None |> Operation.returnOrFail))
                     return injector.Instance() |> unbox<'c>
                 }
             member __.InstanceOf<'c when 'c :> IComponent> (parameters: obj []) =
-                attempt {
-                    let injector = typeInjectors.GetOrAdd(typeof<'c>, (fun _ -> 
-                        let injectorResult = getBestMatchForTypeInjection<'c> (parameters |> Some)
-                        match injectorResult with
-                        | Success injector -> injector
-                        | Failure ex -> raise ex))
+                operation {
+                    let injector = typeInjectors.GetOrAdd(typeof<'c>, (fun _ -> getBestMatchForTypeInjection<'c> (parameters |> Some) |> Operation.returnOrFail))
                     return injector.Instance parameters |> unbox<'c>
                 }
             member __.RegisterSingleton singletonInstance = registerSingleton singletonInstance

@@ -1,6 +1,7 @@
 ﻿namespace CurryOn.Core
 
 open CurryOn.Common
+open FSharp.Control
 open MBrace.FsPickler
 open MBrace.FsPickler.Json
 open System
@@ -77,7 +78,7 @@ module Serialization =
 
     /// Serialize any object to a string of the specified format
     let serialize format any =
-        attempt {
+        operation {
             let serializer =
                 match format with
                 | Xml -> toXml
@@ -90,7 +91,7 @@ module Serialization =
 
     /// Serialize any object to a byte array of the specified format
     let serializeToBytes format any =
-        attempt {
+        operation {
             let serializer =
                 match format with
                 | Xml -> toXmlBytes
@@ -103,7 +104,7 @@ module Serialization =
 
     /// Deserialize a string of the specified format to an instance of the type parameter
     let deserialize<'t> format str =
-        attempt {
+        operation {
             let deserializer =
                 match format with
                 | Xml -> parseXml<'t>
@@ -116,7 +117,7 @@ module Serialization =
 
     /// Deserialize a byte array of the specified format to an instance of the type parameter
     let deserializeBytes<'t> format bytes =
-        attempt {
+        operation {
             let deserializer =
                 match format with
                 | Xml -> parseXmlBytes<'t>

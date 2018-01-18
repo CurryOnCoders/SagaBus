@@ -2,6 +2,7 @@
 
 open Akka.Routing
 open CurryOn.Common
+open FSharp.Control
 open System
 open System.Threading.Tasks
 
@@ -100,21 +101,31 @@ type SubscriptionMode =
 | FromBeginning
 | FromIndex of int64
 
+type MessageBusResult =
+    {
+        MessageId: Guid
+    }
+
+type SubscriptionResult = SubscriptionResult // TODO: Provide subscription information
+
+type SagaBusEvent =
+| UnhandledException of exn
+
 type ISubscription =
     abstract member Name: string
     abstract member Type: SubscriptionType
     abstract member Mode: SubscriptionMode
-    abstract member HandleEvent: IEvent -> Result
+    abstract member HandleEvent: IEvent -> Operation<unit,SagaBusEvent>
 
 type IBus =
-    abstract member SendCommand: ICommand -> Task<unit>
-    abstract member PublishEvent: IEvent -> Task<unit>
-    abstract member Subscribe: ISubscription -> Task<unit>
+    abstract member SendCommand: ICommand -> Operation<MessageBusResult,SagaBusEvent>
+    abstract member PublishEvent: IEvent -> Operation<MessageBusResult,SagaBusEvent>
+    abstract member Subscribe: ISubscription -> Operation<SubscriptionResult,SagaBusEvent>
 
 type IBusClient =
-    abstract member SendCommand: ICommand -> Task<Result>
-    abstract member PublishEvent: IEvent -> Task<Result>
-    abstract member Subscribe: ISubscription -> Task<Result>
+    abstract member SendCommand: ICommand -> Operation<MessageBusResult,SagaBusEvent>
+    abstract member PublishEvent: IEvent -> Operation<MessageBusResult,SagaBusEvent>
+    abstract member Subscribe: ISubscription -> Operation<SubscriptionResult,SagaBusEvent>
 
 type IBusNode =
     inherit IBus
@@ -132,7 +143,7 @@ type IComponentWithConnection<'connection> =
 
 type IComponentWithCredentials<'credentials> =
     inherit IComponent
-    abstract member GetCredentials: unit -> Result<'credentials>
+    abstract member GetCredentials: unit -> Operation<'credentials,SagaBusEvent>
 
 type IMessageProcessingAgent =
     inherit IComponent

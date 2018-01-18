@@ -1,6 +1,7 @@
 ﻿namespace CurryOn.Core
 
 open CurryOn.Common
+open FSharp.Control
 open System
 open System.Configuration
 open System.Net
@@ -256,13 +257,13 @@ module Configuration =
             member this.Agents = this.Agents :> IAgentConfiguration
             
     let reload<'a> () =
-        attempt {
+        operation {
             return ConfigurationManager.GetSection(Configuration.SectionName) |> unbox<'a>
         }
 
     let load<'a> = memoize reload<'a>
 
     let Bus =
-        match load<IBusConfiguration>() with
-        | Success config -> config
+        match load<IBusConfiguration>() |> Operation.wait with
+        | Success config -> config.Result
         | Failure _ -> BusConfigurationSection() :> IBusConfiguration
