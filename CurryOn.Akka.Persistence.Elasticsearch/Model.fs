@@ -51,6 +51,20 @@ type PersistedEvent =
         [<ExactMatch("writer_id")>]       WriterId: string
         [<FullText("event")>]             Event: SerializedEvent
     }
+    interface IPersistentRepresentation with
+        member __.IsDeleted = false
+        member this.Manifest = this.EventType
+        member this.PersistenceId = this.PersistenceId
+        member this.Sender = this.Sender
+        member this.SequenceNr = this.SequenceNumber
+        member this.WriterGuid = this.WriterId
+        member this.Payload = this.Event |> Serialization.parseJson<obj>
+        member this.WithPayload payload = 
+            {this with Event = payload |> Serialization.toJson} :> IPersistentRepresentation
+        member this.WithManifest manifest = 
+            {this with EventType = manifest} :> IPersistentRepresentation
+        member this.Update (sequenceNr, persistenceId, _, sender, writerGuid) = 
+            {this with SequenceNumber = sequenceNr; PersistenceId = persistenceId; Sender = sender; WriterId = writerGuid} :> IPersistentRepresentation
 
 [<CLIMutable>]
 [<Indexed("snapshot")>]

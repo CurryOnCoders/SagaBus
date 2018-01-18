@@ -82,55 +82,34 @@ type ElasticsearchJournal (config: Config) =
     override this.DeleteMessagesToAsync (persistenceId, sequenceNumber) =
         task {
             let client = connect()
-            let query = Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId
-                        |> Query.combine And (Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> Unbounded (Inclusive sequenceNumber))
-                        |> Query.build
-                        |> Search.build None None None None
-            let! result = client.DeleteByQuery(query) |> Operation.waitTask
+            return! Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> Unbounded (Inclusive sequenceNumber)
+                    |> Query.combine And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
+                    |> Query.delete client None None None None
+                    |> SearchOperation.toTask
         } :> Task
 
     override this.ReadHighestSequenceNrAsync (persistenceId, from) =
         task {
-            let! eventStore = connect()
-            let! eventResult = eventStore.ReadEventAsync(persistenceId, StreamPosition.End |> int64, true, plugin.Credentials)
-            match eventResult.Status with
-            | EventReadStatus.Success -> return if eventResult.Event.HasValue
-                                                then if eventResult.Event.Value.Event |> isNotNull
-                                                     then eventResult.Event.Value.Event.EventNumber
-                                                     else eventResult.Event.Value.OriginalEventNumber
-                                                else eventResult.EventNumber
-                                                + 1L
-            | EventReadStatus.NotFound ->
-                let! streamMetadata = eventStore.GetStreamMetadataAsync(persistenceId, plugin.Credentials) 
-                return streamMetadata.StreamMetadata.TruncateBefore.GetValueOrDefault()
-            | _ -> return 0L
+            let client = connect()
+            let! result = 
+                Query.field<PersistedEvent, string> <@ fun event -> event.PersistenceId @> persistenceId
+                |> Query.combine And (Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> (Inclusive from) Unbounded)
+                |> Query.first<PersistedEvent> client None (Sort.descending <@ fun event -> event.SequenceNumber @>)
+                |> Operation.waitTask
+            return match result with
+                   | Success success -> success.Result.SequenceNumber
+                   | _ -> 0L
         }
    
     override this.ReplayMessagesAsync (context, persistenceId, first, last, max, recoveryCallback) =
         task {
-            let! eventStore = connect()
-            let stopped = AsyncManualResetEvent(initialState = false)
-            let start = Math.Max(0L, first - 2L)
-            let eventsToRead = Math.Min(last - start + 1L, max)
-            let settings = CatchUpSubscriptionSettings(CatchUpSubscriptionSettings.Default.MaxLiveQueueSize, !readBatchSize, false, true)
-            let messagesReplayed = ref 0L
-            let stop (subscription: EventStoreCatchUpSubscription) =
-                subscription.Stop()
-                stopped.Set()
-            let toPersistentRepresentation (resolvedEvent: ResolvedEvent) =
-                let deserializedObject = plugin.Serialization.Deserialize<obj> resolvedEvent.Event 
-                let metadata = resolvedEvent.Event.Metadata |> Serialization.parseJsonBytes<EventMetadata>
-                let persistent = Akka.Persistence.Persistent(deserializedObject, resolvedEvent.Event.EventNumber + 1L, resolvedEvent.Event.EventStreamId, metadata.EventType, false, metadata.Sender)
-                persistent :> IPersistentRepresentation
-            let sendMessage subscription (event: ResolvedEvent) =
-                try let persistentEvent = event |> toPersistentRepresentation
-                    persistentEvent |> recoveryCallback.Invoke
-                with | ex -> context.System.Log.Error(ex, sprintf "Error Applying Recovered %s Event from EventStore for %s" event.Event.EventType persistenceId)
-                if event.OriginalEventNumber + 1L >= last || Interlocked.Increment(messagesReplayed) > max
-                then stop subscription
-            let subscription = eventStore.SubscribeToStreamFrom(persistenceId, start |> Nullable, settings, 
-                                                                (fun subscription event -> sendMessage subscription event), 
-                                                                userCredentials = plugin.Credentials)
-            return! stopped.WaitAsync() |> Task.ofUnit
+            let client = connect()
+            let! result =
+                Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> (Inclusive first) (Inclusive last)
+                |> Query.combine And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
+                |> Query.execute<PersistedEvent> client None None None (max |> int |> Some)
+                |> SearchOperation.toTask
+            for hit in result.Results.Hits do
+                hit.Document |> recoveryCallback.Invoke
         } :> Task
     

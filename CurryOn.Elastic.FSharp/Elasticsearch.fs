@@ -6,6 +6,7 @@ open FSharp.Quotations.DerivedPatterns
 open FSharp.Quotations.Patterns
 open Nest
 open System
+open System.Threading.Tasks
 
 module Elasticsearch =
 
@@ -133,3 +134,25 @@ module Elasticsearch =
     //    let searchTerm =
     //        match filterExpression with
     //        |
+
+module SearchResult =
+    exception ElasticsearchEventsException of ElasticsearchEvent []
+    
+    let inline failed<'a> (result: OperationResult<'a,ElasticsearchEvent>) =
+        result.Events |> List.toArray |> ElasticsearchEventsException
+
+    let inline failedTask<'a> result =
+        result |> failed<'a> |> Task.FromException<'a>
+
+    let inline toTask<'a> result =
+        match result with
+        | Success success -> success.Result |> Task.FromResult<'a>
+        | Failure _ -> result |> failedTask<'a>
+
+
+module SearchOperation =
+    let inline toTask<'a> (operation: Operation<'a, ElasticsearchEvent>) =
+        async {
+            let! result = operation |> Operation.waitAsync
+            return result |> SearchResult.toTask
+        } |> Async.StartAsTask |> fun task -> task.Unwrap()
