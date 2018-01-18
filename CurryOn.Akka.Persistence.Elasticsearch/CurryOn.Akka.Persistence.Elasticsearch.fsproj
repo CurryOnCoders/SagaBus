@@ -56,6 +56,7 @@
     <Compile Include="Plugin.fs" />
     <Compile Include="Journal.fs" />
     <Compile Include="SnapshotStore.fs" />
+    <Compile Include="Query.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>
@@ -63,11 +64,17 @@
     <Reference Include="Akka">
       <HintPath>..\packages\Akka.1.2.3\lib\net45\Akka.dll</HintPath>
     </Reference>
+    <Reference Include="Akka.FSharp">
+      <HintPath>..\packages\Akka.FSharp.1.2.3\lib\net45\Akka.FSharp.dll</HintPath>
+    </Reference>
     <Reference Include="Akka.Persistence">
       <HintPath>..\packages\Akka.Persistence.1.2.3.43-beta\lib\net45\Akka.Persistence.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence.FSharp">
       <HintPath>..\packages\Akka.Persistence.FSharp.1.2.3.43-beta\lib\net45\Akka.Persistence.FSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="Akka.Persistence.Query">
+      <HintPath>..\packages\Akka.Persistence.Query.1.2.3.43-beta\lib\net45\Akka.Persistence.Query.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Streams">
       <HintPath>..\packages\Akka.Streams.1.2.3\lib\net45\Akka.Streams.dll</HintPath>
@@ -77,6 +84,12 @@
     </Reference>
     <Reference Include="FSharp.Core">
       <HintPath>..\packages\FSharp.Core.4.1.17\lib\net45\FSharp.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.PowerPack">
+      <HintPath>..\packages\FSPowerPack.Core.Community.3.0.0.0\Lib\Net40\FSharp.PowerPack.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.PowerPack.Linq">
+      <HintPath>..\packages\FSPowerPack.Linq.Community.3.0.0.0\Lib\Net40\FSharp.PowerPack.Linq.dll</HintPath>
     </Reference>
     <Reference Include="FsPickler, Version=3.2.0.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>..\packages\FsPickler.3.2.0\lib\net45\FsPickler.dll</HintPath>

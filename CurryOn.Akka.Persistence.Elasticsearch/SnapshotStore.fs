@@ -41,7 +41,7 @@ type ElasticsearchSnapshotStore (config: Config) =
                   Timestamp = metadata.Timestamp
                   State = snapshot |> Serialization.toJson
                 }
-            let! result = client.Index<Snapshot>({ Id = None; Document = persistedSnapshot }) |> Operation.waitTask
+            let! result = client.Index({ Id = None; Document = persistedSnapshot }) |> Operation.waitTask
             return! result |> SearchResult.toTask
         } :> Task
 

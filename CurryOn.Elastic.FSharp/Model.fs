@@ -144,7 +144,7 @@ type ZeroTermsQuery =
 type MatchClause =
     {
         Field: string
-        Query: string
+        Query: obj
         Operator: Operator option
         ZeroTerms: ZeroTermsQuery option
     }
@@ -242,6 +242,7 @@ type UpperRange<'term when 'term :> IComparable> =
 
 type RangeQuery<'term when 'term :> IComparable> =
     {
+        Field: string
         LowerRange: LowerRange<'term>
         UpperRange: UpperRange<'term>
         Boost: float option
@@ -620,6 +621,27 @@ type DeleteByQueryResponse =
         Deleted: int64
         Failed: int64
     }
+
+type DistinctValuesRequest<'field> =
+    {
+        Size: int option
+        Field: string
+    }
+
+type DistinctValueBucket<'field> =
+    {
+        Key: 'field
+        DocumentCount: int64
+    }
+
+type DistinctValuesResponse<'index,'field when 'index: not struct> =
+    {
+        ElapsedTime: TimeSpan
+        TimedOut: bool
+        Shards: ShardInfo
+        Results: ResultHits<'index>
+        Aggregations: DistinctValueBucket<'field> list
+    }
     
 exception IdConflictError of DocumentId
 exception VersionConflictError of int64*int64
@@ -653,6 +675,8 @@ type ElasticsearchEvent =
     | QueryExecutionError of ElasticError
     | QueryResultsDeleted
     | DeleteByQueryFailed of ElasticError
+    | AggregateQueryExecuted
+    | AggregateQueryFailed of ElasticError
     | UnhandledException of exn
     member this.ToException () =
         match this with
@@ -703,3 +727,5 @@ type IElasticClient =
     abstract member Update<'index when 'index: not struct> : UpdateRequest<'index> -> Operation<UpdateResponse<'index>, ElasticsearchEvent>
     /// Executes a search against the specified Elasticsearch index
     abstract member Search<'index when 'index: not struct> : SearchRequest -> Operation<SearchResult<'index>, ElasticsearchEvent>
+    /// Get the list of distinct values back for the specified field of the Elasticsearch index
+    abstract member Distinct<'index,'field when 'index: not struct> : DistinctValuesRequest<'field> -> Operation<DistinctValuesResponse<'index,'field>, ElasticsearchEvent>

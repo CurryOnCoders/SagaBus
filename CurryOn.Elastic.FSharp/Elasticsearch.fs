@@ -68,6 +68,7 @@ module Elasticsearch =
             member __.DeleteByQuery<'index when 'index: not struct> query = Elastic.deleteByQuery client query
             member __.Update<'index when 'index: not struct> request = Elastic.update<'index> client request
             member __.Search<'index when 'index: not struct> request = Elastic.search<'index> client request
+            member __.Distinct<'index,'field when 'index: not struct> request = Elastic.distinctValues<'index,'field> client request
             member __.Dispose () =
                 (connectionSettings :> IDisposable).Dispose()
         }

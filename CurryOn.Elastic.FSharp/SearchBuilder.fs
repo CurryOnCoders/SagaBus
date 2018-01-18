@@ -24,6 +24,18 @@ module FieldExpr =
         let fieldName = getFieldName getField
         {Field = fieldName; Term = range}
 
+    let inline fieldTerm getField term boost =
+        let fieldName = getFieldName getField
+        {Field = fieldName; Value = term; Boost = boost}
+
+    let inline fieldTerms getField terms =
+        let fieldName = getFieldName getField
+        {Field = fieldName; Values = terms |> Seq.map box |> Seq.toList}
+
+    let inline fieldMatch getField query operator zeroTerms =
+        let fieldName = getFieldName getField
+        {Field = fieldName; Query = query |> box; Operator = operator; ZeroTerms = zeroTerms}
+
 module Sort =
     /// Sort by the specified field in the given direction
     let inline field<'index, 'field when 'index: not struct> direction (getField: Expr<'index -> 'field>) =
@@ -61,6 +73,10 @@ module Search =
             return! topResult.Results.Hits |> List.map (fun hit -> hit.Document) |> List.head |> Result.success
         }
 
+    /// Select the Distinct Values and their Document Counts for the given field in the Elasticsearch Index
+    let inline distinct<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) size (client: CurryOn.Elastic.IElasticClient) =
+        client.Distinct<'index,'field>({Field = FieldExpr.getFieldName getField; Size = size})
+
 module Query =    
     /// Search for a specific field that contains the given value
     let inline field<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) (value: 'field) =
@@ -81,11 +97,11 @@ module Query =
         | Or -> QueryOr (query1, query2)
 
     /// Combine the given Query terms using the AND operator
-    /// Note: They keyword 'and' is reserved by F#, so this function must start with an uppercase letter
+    /// Note: The keyword 'and' is reserved by F#, so this function must start with an uppercase letter
     let And = combine And
         
     /// Combine the given Query terms using the OR operator
-    /// Note: They keyword 'or' is reserved by F#, so this function must start with an uppercase letter
+    /// Note: The keyword 'or' is reserved by F#, so this function must start with an uppercase letter
     let Or = combine Or
         
     /// Create an Elasticsearch Query String Query from the provided term
@@ -103,3 +119,61 @@ module Query =
     /// Select the Top 1 document matching the given query ordered by the given sort
     let inline first<'index when 'index: not struct> client timeout sort query = 
         query |> build |> Search.first<'index> client timeout sort
+
+module Dsl =
+    /// Create an Elasticsearch Query DSL 'Term' Query Clause
+    let inline term<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) (searchTerm: 'field) boost =
+        Term <| FieldExpr.fieldTerm getField searchTerm boost
+
+    /// Create an Elasticsearch Query DSL 'Terms' Query Clause
+    let inline terms<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field []>) (searchTerms: 'field seq) =
+        Terms <| FieldExpr.fieldTerms getField searchTerms
+
+    /// Create an Elasticsearch Query DSL 'Match' Query Clause
+    /// Note: The keyword 'match' is reserved by F#, so this function must start with an uppercase letter.
+    let inline Match<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) (query: 'field) operator zeroTerms =
+        Match <| FieldExpr.fieldMatch getField query operator zeroTerms
+
+    /// Create an Elasticsearch Query DSL 'MatchAll' Query Clause
+    let inline matchAll<'index when 'index: not struct> boost = MatchAll boost
+
+    /// Create an Elasticsearch Query DSL 'MatchNone' Query Clause
+    let inline matchNone<'index when 'index: not struct> () = MatchNone
+
+    /// Create an Elasticsearch Query DSL 'Range' Query Clause for a numeric value range
+    let inline range<'index,'field when 'index: not struct and 'field :> IConvertible and 'field :> IComparable> (getField: Expr<'index -> 'field>) (lower: 'field LowerRange) (upper: 'field UpperRange) boost =
+        let lowerRange = 
+            match lower with
+            | UnboundedLower -> UnboundedLower
+            | GreaterThanOrEqual n -> GreaterThanOrEqual (n |> Convert.ToDouble)
+            | GreaterThan n -> GreaterThan (n |> Convert.ToDouble)
+        let upperRange = 
+            match upper with
+            | UnboundedUpper -> UnboundedUpper
+            | LessThanOrEqual n -> LessThanOrEqual (n |> Convert.ToDouble)
+            | LessThan n -> LessThan (n |> Convert.ToDouble)
+        CurryOn.Elastic.NumericRangeQuery <| {Field = FieldExpr.getFieldName getField; LowerRange = lowerRange; UpperRange = upperRange; Boost = boost; Format = None; TimeZone = None}
+
+    /// Create an Elasticsearch Query DSL 'Range' Query Clause for a Date range
+    let inline dateRange<'index when 'index: not struct> (getField: Expr<'index -> DateTime>) (lower: DateTime LowerRange) (upper: DateTime UpperRange) boost format timeZone =
+        CurryOn.Elastic.DateRangeQuery <| {Field = FieldExpr.getFieldName getField; LowerRange = lower; UpperRange = upper; Boost = boost; Format = format; TimeZone = timeZone}
+
+    /// Combine the given Query DSL clauses into a Bool Query DSL clause
+    let inline bool should filter mustNot must =
+        Bool {Must = must; Should = should; Filter = filter; MustNot = mustNot}
+     
+    /// Create an Elasticsearch RequestBody Query from the provided Query DSL Clause
+    let inline build clause =
+        RequestBodyQuery clause
+
+    /// Execute a Query built from the given Query DSL clause on the provided Elasticsearch Client with the specified parameters
+    let inline execute<'index when 'index: not struct> client timeout sort from size clause =
+        clause |> build |> Search.execute<'index> client timeout sort from size
+
+    /// Execute a DeleteByQuery built from the for the given Query DSL clause on the provided Elasticsearch Client
+    let inline delete<'index when 'index: not struct> client timeout sort from size clause =
+        clause |> build |> Search.delete<'index> client timeout sort from size
+
+    /// Select the Top 1 document matching the given Query DSL clause ordered by the given sort
+    let inline first<'index when 'index: not struct> client timeout sort clause = 
+        clause |> build |> Search.first<'index> client timeout sort

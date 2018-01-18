@@ -3,6 +3,7 @@
 open Akka.Actor
 open Akka.Persistence
 open CurryOn.Elastic
+open Reactive.Streams
 open System
 
 module internal Formats =    
@@ -50,6 +51,7 @@ type PersistedEvent =
         [<Int64("sequence_number")>]      SequenceNumber: int64
         [<ExactMatch("writer_id")>]       WriterId: string
         [<FullText("event")>]             Event: SerializedEvent
+        [<ExactMatch("tags")>]            Tags: string []
     }
     interface IPersistentRepresentation with
         member __.IsDeleted = false
@@ -76,3 +78,8 @@ type Snapshot =
         [<Date("timestamp", Formats.Date)>] Timestamp: DateTime
         [<FullText("state")>]               State: SerializedSnapshot
     }
+
+
+type AllPersistenceIdsMessages =
+    | RegisterSubscriber of ISubscriber<string>
+    | NewPersistenceId of string

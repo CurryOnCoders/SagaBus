@@ -54,3 +54,4 @@ let rec parseExpression (expr: Expr) =
 let myFilter = <@ fun (a: MyIndex) -> a.A > 1 @>
 
 myFilter |> parseExpression |> FSharp.Quotations.Evaluator.QuotationEvaluator.Evaluate
+

@@ -416,7 +416,7 @@ module internal Elastic =
     let rec applyQueryClauseToDescriptor<'index when 'index: not struct> (queryClause: QueryClause) (search: QueryContainerDescriptor<'index>) =
         let applyMatchClause (matchClause: MatchClause) (query: QueryContainerDescriptor<'index>) =
             query.Match(fun m -> 
-                let matched = m.Field(field matchClause.Field).Query(matchClause.Query)
+                let matched = m.Field(field matchClause.Field).Query(Convert.ToString(matchClause.Query))
                 match matchClause.Operator with
                 | Some operator ->
                     match operator with
@@ -504,7 +504,7 @@ module internal Elastic =
         | Terms terms -> search.Terms(fun t -> t.Field(field terms.Field).Terms(terms.Values) :> ITermsQuery)
         | TermsSet set -> search.Terms(fun t -> t.Field(field set.Field).Terms(set.Terms) :> ITermsQuery)
         | DateRangeQuery range -> search.DateRange(fun d -> 
-            let dateRange = d.Boost(range.Boost |> toNullable)
+            let dateRange = d.Field(field range.Field).Boost(range.Boost |> toNullable)
             let ranged = 
                 match range.LowerRange with
                 | UnboundedLower -> 
@@ -533,7 +533,7 @@ module internal Elastic =
                 | None -> ranged
             :> IDateRangeQuery)
         | NumericRangeQuery range -> search.Range(fun d -> 
-            let numRange = d.Boost(range.Boost |> toNullable)
+            let numRange = d.Field(field range.Field).Boost(range.Boost |> toNullable)
             match range.LowerRange with
             | UnboundedLower -> 
                 match range.UpperRange with
@@ -552,7 +552,7 @@ module internal Elastic =
                 | LessThanOrEqual upper -> numRange.GreaterThanOrEquals(Nullable lower).LessThanOrEquals(Nullable upper)
             :> INumericRangeQuery)
         | StringRangeQuery range -> search.TermRange(fun d ->
-            let termRange = d.Boost(range.Boost |> toNullable)
+            let termRange = d.Field(field range.Field).Boost(range.Boost |> toNullable)
             match range.LowerRange with
             | UnboundedLower -> 
                 match range.UpperRange with
@@ -797,4 +797,28 @@ module internal Elastic =
                             }
                          Result.successWithEvents deleteResponse [SearchExecutedSuccessfully]
                     else Result.failure [response |> toError |> DeleteByQueryFailed]
+        }
+
+    let distinctValues<'index,'field when 'index: not struct> (client: ElasticClient) (request: DistinctValuesRequest<'field>) =
+        operation {
+            let name = sprintf "distinct_%s_agg" request.Field
+            let size = if request.Size.IsSome then request.Size.Value else 0
+            let! response = client.SearchAsync<'index>(fun (s: SearchDescriptor<'index>) -> 
+                s.Aggregations(fun a -> a.Terms(name, fun t -> 
+                    t.Field(field request.Field).Size(size) :> ITermsAggregation) :> IAggregationContainer) :> ISearchRequest)
+            return! if response.IsValid
+                    then let distinctResponse =
+                            { ElapsedTime = response.Took |> float |> TimeSpan.FromMilliseconds
+                              TimedOut = response.TimedOut
+                              Shards = {Successful = response.Shards.Successful; Failed = response.Shards.Failed; Total = response.Shards.Total}
+                              Results = { TotalHits = response.HitsMetaData.Total
+                                          MaximumScore = Some response.HitsMetaData.MaxScore
+                                          Hits = response.Hits 
+                                                 |> Seq.map (fun hit -> {Index = hit.Index; Type = hit.Type; Id = hit.Id |> DocumentId.Parse; Score = hit.Score |> toOption; Document = hit.Source})
+                                                 |> Seq.toList
+                                        }
+                              Aggregations = response.Aggs.Terms(name).Buckets |> Seq.map (fun bucket -> {Key = bucket.Key |> unbox<'field>; DocumentCount = bucket.DocCount.GetValueOrDefault()}) |> Seq.toList
+                            }
+                         Result.successWithEvents distinctResponse [AggregateQueryExecuted]
+                    else Result.failure [response |> toError |> AggregateQueryFailed]
         }
