@@ -677,6 +677,9 @@ type ElasticsearchEvent =
     | DeleteByQueryFailed of ElasticError
     | AggregateQueryExecuted
     | AggregateQueryFailed of ElasticError
+    | CountQueryExecuted
+    | CountQueryFailed of ElasticError
+    | NoDocumentsInIndex
     | UnhandledException of exn
     member this.ToException () =
         match this with
@@ -725,6 +728,8 @@ type IElasticClient =
     abstract member Delete<'index when 'index: not struct> : DeleteRequest<'index> -> Operation<DeleteResponse, ElasticsearchEvent>
     /// Updates the specified document in the Elasticsearch index, performing either a scripted update, field-level updates, or an Upsert
     abstract member Update<'index when 'index: not struct> : UpdateRequest<'index> -> Operation<UpdateResponse<'index>, ElasticsearchEvent>
+    /// Get a count of all documents in the Elasticsearch index
+    abstract member Count<'index when 'index: not struct> : unit -> Operation<int64, ElasticsearchEvent>
     /// Executes a search against the specified Elasticsearch index
     abstract member Search<'index when 'index: not struct> : SearchRequest -> Operation<SearchResult<'index>, ElasticsearchEvent>
     /// Get the list of distinct values back for the specified field of the Elasticsearch index

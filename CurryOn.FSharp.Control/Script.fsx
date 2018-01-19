@@ -315,3 +315,18 @@ let failedOpTest =
         failwith "Explode!"
         return 0
     }
+
+let unitOp = 
+    operation {
+        return ()
+    }
+
+let compoundUnitOp =
+    operation {
+        let! html = fetchUrl "http://google.com"
+        if html |> isNull
+        then ()
+        else for c in html do
+                do! unitOp
+        return! Result.success ()
+    }

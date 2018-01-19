@@ -70,7 +70,7 @@ module Search =
     let inline first<'index when 'index: not struct> client timeout sort search = 
         operation {
             let! topResult = search |> top<'index> client timeout sort 1
-            return! topResult.Results.Hits |> List.map (fun hit -> hit.Document) |> List.head |> Result.success
+            return! topResult.Results.Hits |> List.map (fun hit -> hit.Document) |> List.tryHead |> Result.success
         }
 
     /// Select the Distinct Values and their Document Counts for the given field in the Elasticsearch Index

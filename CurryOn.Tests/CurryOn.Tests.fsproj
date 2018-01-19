@@ -51,8 +51,10 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="EventStorePersistenceDomain.fs" />
+    <Compile Include="Common.fs" />
+    <Compile Include="AkkaPersistenceDomain.fs" />
     <Compile Include="EventStorePersistenceTests.fs" />
+    <Compile Include="ElasticsearchPersistenceTests.fs" />
     <Content Include="App.config" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
@@ -124,7 +126,7 @@
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\packages\Newtonsoft.Json.9.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\packages\Newtonsoft.Json.10.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="Reactive.Streams">
       <HintPath>..\packages\Reactive.Streams.1.0.2\lib\net45\Reactive.Streams.dll</HintPath>
@@ -144,6 +146,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CurryOn.Akka.Persistence.Elasticsearch\CurryOn.Akka.Persistence.Elasticsearch.fsproj">
+      <Name>CurryOn.Akka.Persistence.Elasticsearch</Name>
+      <Project>{6c1347d5-7edb-4df1-8aaa-63cd3a7133f3}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Akka.Persistence.EventStore\CurryOn.Akka.Persistence.EventStore.fsproj">
       <Name>CurryOn.Akka.Persistence.EventStore</Name>
       <Project>{afacf2db-d3a6-4e72-a408-648bd6bfc0ab}</Project>

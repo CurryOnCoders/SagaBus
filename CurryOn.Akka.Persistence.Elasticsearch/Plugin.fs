@@ -5,14 +5,15 @@ open Akka.Persistence
 open Akka.Serialization
 open Akka.Streams
 open CurryOn.Elastic
+open FSharp.Control
 open System
 
 module internal Settings =
     let load (config: Akka.Configuration.Config) =
         { Node = config.GetString("uri", "http://localhost:9200") |> Uri
-          DisableDirectStreaming = config.GetBoolean("disableDirectStreaming", false)
-          RequestTimeout = config.GetTimeSpan("requestTimeout", TimeSpan.FromMinutes(1.0) |> Nullable)
-          IndexMappings = config.GetConfig("indexMappings").AsEnumerable() |> Seq.map (fun keyValue -> 
+          DisableDirectStreaming = config.GetBoolean("disable-direct-streaming", false)
+          RequestTimeout = config.GetTimeSpan("requestt-timeout", TimeSpan.FromMinutes(1.0) |> Nullable)
+          IndexMappings = config.GetConfig("index-mappings").AsEnumerable() |> Seq.map (fun keyValue -> 
             try
                 let clrType = Type.GetType(keyValue.Value.GetString())
                 match clrType.GetCustomAttributes(typeof<Nest.ElasticsearchTypeAttribute>, true) with
@@ -44,10 +45,25 @@ type ElasticsearchSerialization (serialization: Serialization) =
 type IElasticsearchPlugin =
     inherit IJournalPlugin
 
-type internal ElasticsearchPlugin (system: ActorSystem) =
+type ElasticsearchPlugin (system: ActorSystem) =
     let config = system.Settings.Config
     let settings = config.GetConfig("akka.persistence.journal.elasticsearch") |> Settings.load
     let connection = settings |> Elasticsearch.connect
+
+    do 
+        operation {
+            let existsMethod = typeof<IElasticClient>.GetMethod("IndexExists")
+            let createMethod = typeof<IElasticClient>.GetMethod("CreateIndex", [||])
+            for indexMapping in settings.IndexMappings do
+                let exists = existsMethod.MakeGenericMethod(indexMapping.Type)
+                let create = createMethod.MakeGenericMethod(indexMapping.Type)
+                let! indexExists = exists.Invoke(connection, null) |> unbox<Operation<bool, ElasticsearchEvent>>
+                if indexExists |> not
+                then let! result = create.Invoke(connection, null) |> unbox<Operation<unit, ElasticsearchEvent>>
+                     result
+            return! Result.success()
+        } |> Operation.returnOrFail
+
     new (context: IActorContext) = ElasticsearchPlugin(context.System)    
     member __.Connect () = connection
     member __.Config = config

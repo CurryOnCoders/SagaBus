@@ -17,6 +17,7 @@ module internal Elastic =
     let time: TimeSpan -> Time = Time.op_Implicit
     let minimumShouldMatch: float -> MinimumShouldMatch = MinimumShouldMatch.op_Implicit
     let typeName: string -> TypeName = TypeName.op_Implicit
+    let inline formatDate (date: DateTime) = date.ToString("yyyy-MM-dd'T'HH:mm:ss.fffK")
 
     let rec private getCause (cause: Elasticsearch.Net.CausedBy) =
         { Type = cause.Type
@@ -297,18 +298,18 @@ module internal Elastic =
                     match dateRange.Minimum with
                     | Inclusive min ->
                         match dateRange.Maximum with
-                        | Inclusive max -> sprintf "[%A TO %A]" min max
-                        | Exclusive max -> sprintf "[%A TO %A}" min max
-                        | Unbounded ->sprintf "[%A to *]" min
+                        | Inclusive max -> sprintf "[%A TO %A]" (formatDate min) (formatDate max)
+                        | Exclusive max -> sprintf "[%A TO %A}" (formatDate min) (formatDate max)
+                        | Unbounded ->sprintf "[%A to *]" (formatDate min)
                     | Exclusive min ->
                         match dateRange.Maximum with
-                        | Inclusive max -> sprintf "{%A TO %A]" min max
-                        | Exclusive max -> sprintf "{%A TO %A}" min max
-                        | Unbounded -> sprintf "{%A to *}" min
+                        | Inclusive max -> sprintf "{%A TO %A]" (formatDate min) (formatDate max)
+                        | Exclusive max -> sprintf "{%A TO %A}" (formatDate min) (formatDate max)
+                        | Unbounded -> sprintf "{%A to *}" (formatDate min)
                     | Unbounded ->
                         match dateRange.Maximum with
-                        | Inclusive max -> sprintf "[* TO %A]" max
-                        | Exclusive max -> sprintf "[* TO %A}" max 
+                        | Inclusive max -> sprintf "[* TO %A]" (formatDate max)
+                        | Exclusive max -> sprintf "[* TO %A}" (formatDate max) 
                         | Unbounded -> "[* to *]"
                 | IntegerRange intRange ->
                     match intRange.Minimum with
@@ -764,24 +765,48 @@ module internal Elastic =
 
         finalizedDelete :> IDeleteByQueryRequest
 
+    let count<'index when 'index: not struct> (client: ElasticClient) =
+        operation {
+            let! response = client.CountAsync<'index>(fun c -> c.Query(fun q -> q.MatchAll()) :> ICountRequest)
+            return! if response.IsValid
+                    then Result.successWithEvents response.Count [CountQueryExecuted]
+                    else Result.failure [response |> toError |> CountQueryFailed]
+        }
+
+    let any<'index when 'index: not struct> (client: ElasticClient) =
+        operation {
+            let! count = count<'index> client
+            return! Result.success (count > 0L)
+        }
+
     let search<'index when 'index: not struct> (client: ElasticClient) (request: CurryOn.Elastic.SearchRequest) =
         operation {
-            let! response = client.SearchAsync<'index>(fun sd -> sd |> applySearchRequestToDescriptor request)
-            return! if response.IsValid
-                    then let searchResponse =
-                            { ElapsedTime = response.Took |> float |> TimeSpan.FromMilliseconds
-                              TimedOut = response.TimedOut
-                              Shards = {Total = response.Shards.Total; Failed = response.Shards.Failed; Successful = response.Shards.Successful}
-                              Results = { TotalHits = response.HitsMetaData.Total
-                                          MaximumScore = Some response.HitsMetaData.MaxScore
-                                          Hits = response.Hits 
-                                                 |> Seq.map (fun hit -> {Index = hit.Index; Type = hit.Type; Id = hit.Id |> DocumentId.Parse; Score = hit.Score |> toOption; Document = hit.Source})
-                                                 |> Seq.toList
-                                        }
-                              ScrollId = response.ScrollId
-                            }
-                         Result.successWithEvents searchResponse [SearchExecutedSuccessfully]
-                    else Result.failure [response |> toError |> QueryExecutionError]
+            let! anyExist = any<'index> client
+            if anyExist
+            then let! response = client.SearchAsync<'index>(fun sd -> sd |> applySearchRequestToDescriptor request)
+                 return! if response.IsValid
+                         then let searchResponse =
+                                 { ElapsedTime = response.Took |> float |> TimeSpan.FromMilliseconds
+                                   TimedOut = response.TimedOut
+                                   Shards = {Total = response.Shards.Total; Failed = response.Shards.Failed; Successful = response.Shards.Successful}
+                                   Results = { TotalHits = response.HitsMetaData.Total
+                                               MaximumScore = Some response.HitsMetaData.MaxScore
+                                               Hits = response.Hits 
+                                                      |> Seq.map (fun hit -> {Index = hit.Index; Type = hit.Type; Id = hit.Id |> DocumentId.Parse; Score = hit.Score |> toOption; Document = hit.Source})
+                                                      |> Seq.toList
+                                             }
+                                   ScrollId = response.ScrollId
+                                 }
+                              Result.successWithEvents searchResponse [SearchExecutedSuccessfully]
+                         else Result.failure [response |> toError |> QueryExecutionError]
+            else let searchResponse =
+                    { ElapsedTime = TimeSpan.Zero
+                      TimedOut = false
+                      Shards = {Total = 0; Failed = 0; Successful = 0}
+                      Results = {TotalHits = 0L; MaximumScore = None; Hits =[]}
+                      ScrollId = String.Empty
+                    } 
+                 return! Result.successWithEvents searchResponse [NoDocumentsInIndex]
         }
 
     let deleteByQuery<'index when 'index: not struct> (client: ElasticClient) (search: CurryOn.Elastic.SearchRequest) =

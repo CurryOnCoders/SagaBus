@@ -47,11 +47,13 @@ type ElasticsearchSnapshotStore (config: Config) =
 
     override __.LoadAsync (persistenceId, criteria) =
         task {            
-            let! snapshot =
+            let! firstSnapshot =
                 getSnapshotQuery persistenceId criteria
                 |> Query.first<Snapshot> client None (Sort.descending <@ fun snapshot -> snapshot.SequenceNumber @>)
                 |> SearchOperation.toTask
-            return SelectedSnapshot(SnapshotMetadata(snapshot.PersistenceId, snapshot.SequenceNumber, snapshot.Timestamp), snapshot.State)
+            match firstSnapshot with
+            | Some snapshot -> return SelectedSnapshot(SnapshotMetadata(snapshot.PersistenceId, snapshot.SequenceNumber, snapshot.Timestamp), snapshot.State)
+            | None -> return null
         }
     
     override __.DeleteAsync (metadata) =

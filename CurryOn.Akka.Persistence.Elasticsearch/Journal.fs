@@ -88,13 +88,16 @@ type ElasticsearchJournal (config: Config) =
 
     override this.ReadHighestSequenceNrAsync (persistenceId, from) =
         task {
-            let! result = 
+            let! highestSequence = 
                 Query.field<PersistedEvent, string> <@ fun event -> event.PersistenceId @> persistenceId
                 |> Query.And (Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> (Inclusive from) Unbounded)
                 |> Query.first<PersistedEvent> client None (Sort.descending <@ fun event -> event.SequenceNumber @>)
                 |> Operation.waitTask
-            return match result with
-                   | Success success -> success.Result.SequenceNumber
+            return match highestSequence with
+                   | Success success -> 
+                        match success.Result with
+                        | Some result -> result.SequenceNumber
+                        | None -> 0L
                    | _ -> 0L
         }
    
