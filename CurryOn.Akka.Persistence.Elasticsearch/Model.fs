@@ -2,6 +2,7 @@
 
 open Akka.Actor
 open Akka.Persistence
+open Akka.Persistence.Query
 open CurryOn.Elastic
 open Reactive.Streams
 open System
@@ -79,7 +80,37 @@ type Snapshot =
         [<FullText("state")>]               State: SerializedSnapshot
     }
 
+[<CLIMutable>]
+type RegisterEventSubscriber =
+    {
+        Subscriber: ISubscriber<EventEnvelope>
+        PersistenceId: string
+        FromSequence: int64
+        ToSequence: int64
+    }
+
+[<CLIMutable>]
+type RegisterTagSubscriber =
+    {
+        Subscriber: ISubscriber<EventEnvelope>
+        Tag: string
+        Offset: int64
+    }
 
 type AllPersistenceIdsMessages =
     | RegisterSubscriber of ISubscriber<string>
     | NewPersistenceId of string
+
+type EventsByPersistenceIdMessages =
+    | RegisterEventSubscriber of RegisterEventSubscriber
+    | NewEvent of EventEnvelope
+
+type TaggedEvent =
+    {
+        Tag: string
+        Event: EventEnvelope
+    }
+
+type EventsByTagMessages =
+    | RegisterTagSubscriber of RegisterTagSubscriber
+    | NewTaggedEvent of TaggedEvent

@@ -24,10 +24,13 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
         | IntegerId i -> i
         | _ -> 0L
 
+    let hitToEventEnvelope (hit: Hit<PersistedEvent>) =
+        EventEnvelope(hit.Id |> toOffset, hit.Document.PersistenceId, hit.Document.SequenceNumber, hit.Document.Event |> Serialization.parseJson<obj>)
+
     let processHits (subscriber: ISubscriber<EventEnvelope>) (search: SearchResult<PersistedEvent>)  =
         search.Results.Hits
-        |> List.map (fun hit -> EventEnvelope(hit.Id |> toOffset, hit.Document.PersistenceId, hit.Document.SequenceNumber, hit.Document.Event |> Serialization.parseJson<obj>))
-        |> List.iter (fun event -> subscriber.OnNext event)
+        |> List.map hitToEventEnvelope
+        |> List.iter subscriber.OnNext
 
     let getCurrentPersistenceIds () =
         operation {
@@ -35,19 +38,119 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
             return! distinctValues.Aggregations |> List.map (fun value -> value.Key) |> Result.success
         }
 
+    let getCurrentEvents () =
+        operation {
+            let sort = Some <| Sort.ascending <@ fun (persistedEvent: PersistedEvent) -> persistedEvent.SequenceNumber @>
+            return! MatchAll None |> Dsl.execute<PersistedEvent> client None sort None None
+        } 
+
+    let getCurrentEventsByTag tag offset =
+        operation {
+            return! [Dsl.terms<PersistedEvent,string> <@ fun persistedEvent -> persistedEvent.Tags @> [tag]]
+                    |> Dsl.bool [] [Dsl.range<PersistedEvent,int64> <@ fun persistedEvent -> persistedEvent.EventId @> (GreaterThanOrEqual offset) UnboundedUpper None] []
+                    |> Dsl.execute<PersistedEvent> client None (Some <| Sort.ascending <@ fun persistedEvent -> persistedEvent.SequenceNumber @>) None None
+        }
+
+    let getCurrentEventsByPersistenceId persistenceId min max =
+        operation {
+            let inline toBound opt = 
+                match opt with
+                | Some value -> Inclusive value
+                | None -> Unbounded
+            let fromSequence = min |> toBound
+            let toSequence = max |> toBound
+            return!
+                Query.field<PersistedEvent,string> <@ fun persistedEvent -> persistedEvent.PersistenceId @> persistenceId
+                |> Query.And (Query.range<PersistedEvent,int64> <@ fun persistedEvent -> persistedEvent.SequenceNumber @> fromSequence toSequence)
+                |> Query.execute<PersistedEvent> client None (Some <| Sort.ascending <@ fun persistedEvent -> persistedEvent.SequenceNumber @>) None None
+        } 
+
     let allPersistenceIdsActor = 
-        spawn system "all-persistence-ids"
-        <| fun (inbox: AllPersistenceIdsMessages Actor) ->
-            let subscribers = new List<ISubscriber<string>>()
-            let rec messageLoop () =
-                actor {
-                    let! message = inbox.Receive()
-                    match message with
-                    | RegisterSubscriber subscriber -> subscribers.Add(subscriber)
-                    | NewPersistenceId persistenceId -> subscribers |> Seq.iter (fun subscriber -> subscriber.OnNext persistenceId)
-                    return! messageLoop ()
-                }
-            messageLoop ()
+        let actor = 
+            spawn system "all-persistence-ids"
+            <| fun (inbox: AllPersistenceIdsMessages Actor) ->
+                let subscribers = new List<ISubscriber<string>>()
+                let knownPersistenceIds = new HashSet<string>()
+                let rec messageLoop () =
+                    actor {
+                        let! message = inbox.Receive()
+                        match message with
+                        | RegisterSubscriber subscriber -> 
+                            subscribers.Add(subscriber)
+                            knownPersistenceIds |> Seq.iter subscriber.OnNext
+                        | NewPersistenceId persistenceId -> 
+                            if knownPersistenceIds.Add(persistenceId)
+                            then subscribers |> Seq.iter (fun subscriber -> subscriber.OnNext persistenceId)
+                        return! messageLoop ()
+                    }
+                messageLoop ()
+        operation {
+            let! currentIds = getCurrentPersistenceIds()
+            for id in currentIds
+                do actor <! NewPersistenceId id
+            return! Result.success actor
+        } |> Operation.returnOrFail        
+
+    let eventsByPersistenceIdActor = 
+        let actor = 
+            spawn system "events-by-persistence-id"
+            <| fun (inbox: EventsByPersistenceIdMessages Actor) ->
+                let subscribers = new Dictionary<string, List<ISubscriber<EventEnvelope>>>()
+                let knownEvents = new HashSet<EventEnvelope>()
+                let rec messageLoop () =
+                    actor {
+                        let! message = inbox.Receive()
+                        match message with
+                        | RegisterEventSubscriber register -> 
+                            if subscribers.ContainsKey(register.PersistenceId) |> not
+                            then subscribers.Add(register.PersistenceId, new List<ISubscriber<EventEnvelope>>())
+                            subscribers.[register.PersistenceId].Add(register.Subscriber)
+                            knownEvents 
+                            |> Seq.filter (fun event -> event.PersistenceId = register.PersistenceId && event.SequenceNr >= register.FromSequence && event.SequenceNr <= register.ToSequence) 
+                            |> Seq.iter register.Subscriber.OnNext
+                        | NewEvent event ->                             
+                            if knownEvents.Add(event)
+                            then subscribers.[event.PersistenceId] |> Seq.iter (fun subscriber -> subscriber.OnNext event)
+                        return! messageLoop ()
+                    }
+                messageLoop ()
+        operation {
+            let! currentEvents = getCurrentEvents ()
+            for hit in currentEvents.Results.Hits
+                do actor <! NewEvent (hit |> hitToEventEnvelope)
+            return! Result.success actor
+        } |> Operation.returnOrFail
+
+    let eventsByTagActor = 
+        let actor = 
+            spawn system "events-by-tag"
+            <| fun (inbox: EventsByTagMessages Actor) ->
+                let subscribers = new Dictionary<string, List<ISubscriber<EventEnvelope>>>()
+                let knownEvents = new HashSet<TaggedEvent>()
+                let rec messageLoop () =
+                    actor {
+                        let! message = inbox.Receive()
+                        match message with
+                        | RegisterTagSubscriber register -> 
+                            if subscribers.ContainsKey(register.Tag) |> not
+                            then subscribers.Add(register.Tag, new List<ISubscriber<EventEnvelope>>())
+                            subscribers.[register.Tag].Add(register.Subscriber)
+                            knownEvents 
+                            |> Seq.filter (fun event -> event.Tag = register.Tag && event.Event.Offset <= register.Offset) 
+                            |> Seq.iter (fun tagged -> tagged.Event |> register.Subscriber.OnNext)
+                        | NewTaggedEvent taggedEvent ->                             
+                            if knownEvents.Add(taggedEvent)
+                            then subscribers.[taggedEvent.Tag] |> Seq.iter (fun subscriber -> subscriber.OnNext taggedEvent.Event)
+                        return! messageLoop ()
+                    }
+                messageLoop ()
+        operation {
+            let! currentEvents = getCurrentEvents ()
+            for hit in currentEvents.Results.Hits do
+                for tag in hit.Document.Tags do
+                    do actor <! NewTaggedEvent {Tag = tag; Event = hit |> hitToEventEnvelope}
+            return! Result.success actor
+        } |> Operation.returnOrFail
 
     static member Identifier = "elasticsearch.persistence.query"
 
@@ -57,11 +160,7 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
                 member __.Subscribe subscriber =
                     let result = 
                         operation {
-                            let! search =
-                                Query.field<PersistedEvent,string> <@ fun persistedEvent -> persistedEvent.PersistenceId @> persistenceId
-                                |> Query.And (Query.range<PersistedEvent,int64> <@ fun persistedEvent -> persistedEvent.SequenceNumber @> (Inclusive fromSequence) (Inclusive toSequence))
-                                |> Query.execute<PersistedEvent> client None (Some <| Sort.ascending <@ fun persistedEvent -> persistedEvent.SequenceNumber @>) None None
-
+                            let! search = getCurrentEventsByPersistenceId persistenceId (Some fromSequence) (Some toSequence)
                             search |> processHits subscriber
                         } |> Operation.wait
                     match result with
@@ -78,10 +177,7 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
                 member __.Subscribe subscriber =
                     let result = 
                         operation {
-                            let! search =
-                                [Dsl.terms<PersistedEvent,string> <@ fun persistedEvent -> persistedEvent.Tags @> [tag]]
-                                |> Dsl.bool [] [Dsl.range<PersistedEvent,int64> <@ fun persistedEvent -> persistedEvent.EventId @> (GreaterThanOrEqual offset) UnboundedUpper None] []
-                                |> Dsl.execute<PersistedEvent> client None (Some <| Sort.ascending <@ fun persistedEvent -> persistedEvent.SequenceNumber @>) None None
+                            let! search = getCurrentEventsByTag tag offset                                
                             search |> processHits subscriber
                         } |> Operation.wait
                     match result with
@@ -106,54 +202,23 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
         Source.FromPublisher 
             {new IPublisher<string> with
                 member __.Subscribe subscriber =
-                    operation {
-                        let! currentIds = getCurrentPersistenceIds()
-                        allPersistenceIdsActor <! RegisterSubscriber subscriber
-                        currentIds |> List.iter (fun id -> subscriber.OnNext id)
-                    } |> Operation.returnOrFail
+                    allPersistenceIdsActor <! RegisterSubscriber subscriber
             }
 
     member __.EventsByPersistenceId (persistenceId, fromSequence, toSequence) =
         Source.FromPublisher
             {new IPublisher<EventEnvelope> with
                 member __.Subscribe subscriber =
-                    task {
-                        let! eventStore = plugin.Connect()
-                        let settings = CatchUpSubscriptionSettings(defaultSettings.MaxLiveQueueSize, readBatchSize.Value, false, true)
-                        let handleEvent stopSubscription (resolvedEvent: ResolvedEvent) =
-                            if resolvedEvent.Event |> isNotNull
-                            then let event = resolvedEvent.Event
-                                 try EventEnvelope(0L, persistenceId, event.EventNumber, resolvedEvent |> deserialize) |> subscriber.OnNext
-                                 with | ex -> subscriber.OnError ex
-                                 if event.EventNumber >= toSequence
-                                 then stopSubscription ()
-                                      subscriber.OnComplete()                        
-                        return 
-                            if fromSequence < 0L || fromSequence = Int64.MaxValue
-                            then eventStore.SubscribeToStreamAsync(persistenceId, true, (fun subscription event -> event |> handleEvent subscription.Unsubscribe), userCredentials = plugin.Credentials) |> Task.ignoreSynchronously
-                            else eventStore.SubscribeToStreamFrom(persistenceId, Nullable fromSequence, settings, (fun subscription event -> event |> handleEvent subscription.Stop), userCredentials = plugin.Credentials) |> ignore
-                    } |> Task.runSynchronously
+                    let registration = {Subscriber = subscriber; PersistenceId = persistenceId; FromSequence = fromSequence; ToSequence = if toSequence > 0L then toSequence else Int64.MaxValue}
+                    eventsByPersistenceIdActor <! RegisterEventSubscriber registration
             }
 
     member __.EventsByTag (tag, offset) =  
         Source.FromPublisher
             {new IPublisher<EventEnvelope> with
                 member __.Subscribe subscriber =
-                    task {
-                        let! eventStore = plugin.Connect()
-                        let settings = CatchUpSubscriptionSettings(defaultSettings.MaxLiveQueueSize, defaultSettings.ReadBatchSize, false, true)
-                        let handleEvent stopSubscription (resolvedEvent: ResolvedEvent) =
-                            if resolvedEvent.Event |> isNotNull
-                            then let event = resolvedEvent.Event
-                                 try let metadata = resolvedEvent.Event.Metadata |> Serialization.parseJsonBytes<EventMetadata>
-                                     if metadata.Tags |> Seq.contains tag 
-                                     then EventEnvelope(0L, event.EventStreamId, event.EventNumber, resolvedEvent |> deserialize) |> subscriber.OnNext
-                                 with | ex -> subscriber.OnError ex                  
-                        return
-                            if offset < 0L || offset = Int64.MaxValue
-                            then eventStore.SubscribeToAllAsync(true, (fun subscription event -> event |> handleEvent subscription.Unsubscribe), userCredentials = plugin.Credentials) |> Task.ignoreSynchronously
-                            else eventStore.SubscribeToAllFrom(Nullable <| Position(offset,offset), settings, (fun subscription event -> event |> handleEvent subscription.Stop), userCredentials = plugin.Credentials) |> ignore
-                    } |> Task.runSynchronously
+                    let registration = {Subscriber = subscriber; Tag = tag; Offset = offset}
+                    eventsByTagActor <! RegisterTagSubscriber registration
             }
 
     interface IReadJournal
