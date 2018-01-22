@@ -60,7 +60,7 @@
     <None Include="ReadMe.md" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
-    <None Include="CurryOn.Akka.Persistence.Elasticsearch" />
+    <None Include="CurryOn.Akka.Persistence.Elasticsearch.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Akka">
