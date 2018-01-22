@@ -1,0 +1,17 @@
+﻿<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>CurryOn.Elastic.FSharp</id>
+    <version>0.1.0</version>
+    <title>CurryOn.Elastic.FSharp</title>
+    <authors>CurryOn Coders</authors>
+    <owners>CurryOn Coders</owners>
+    <licenseUrl>https://github.com/CurryOnCoders/CurryOn/blob/master/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Elastic.FSharp</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>An F#-idiomatch Library for Elasticsearch, including an F# DSL representation of the Elasticsearch Query Model, and F# modules for searching and indexing documents as well as creating and maintaining indexes.</description>
+    <releaseNotes>Initial Release.</releaseNotes>
+    <copyright>Copyright 2018</copyright>
+    <tags>F# FSharp Elasticsearch Elastic Search Query DSL</tags>
+  </metadata>
+</package>

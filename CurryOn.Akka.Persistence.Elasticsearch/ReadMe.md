@@ -1,0 +1,2 @@
+﻿# CurryOn.Akka.Persistence.Elasticsearch
+Akka.net Persistence Plug-in for Elasticsearch.  Includes Event Journal, Snapshot Store, and Query Read Journal.  Utilizes the CurryOn.Elastic.FSharp library to interface with Elasticsearch from F#.

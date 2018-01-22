@@ -3,6 +3,9 @@ An initiative for building frameworks and packages for F# to enable development 
 
 ## Projects
 
+### Curryon.Akka.Persistence.Elasticsearch
+An Akka.net Persistence package for [Elasticsearch](http://elastic.co).  Supports the use of Elasticsearch Indices as Akka.net Event Journals and Snapshot Stores, as well as providing an AsyncReadJournal based on the Elasticsearch Search API.  Uses the CurryOn.Elastic.FSharp library to interface with Elasticsearch.
+
 ### Curryon.Akka.Persistence.EventStore
 An Akka.net Persistence package for [EventStore](http://geteventstore.com).  Supports the use of EventStore Event Streams as Akka.net Event Journals, where each PersistenceId in Akka.net is a unique stream in EventStore.  Also supports using EventStore as an Akka.net SnapshotStore, creating Snapshot and SnapshotMetadata streams for each Akka.net PersistenceId.  Implements the standard Akka.net Persistence Query API using EventStore Subscriptions.
 

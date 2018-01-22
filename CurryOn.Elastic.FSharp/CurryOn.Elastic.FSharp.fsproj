@@ -57,8 +57,10 @@
     <Compile Include="Elastic.fs" />
     <Compile Include="SearchBuilder.fs" />
     <Compile Include="Elasticsearch.fs" />
+    <None Include="ReadMe.md" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
+    <None Include="CurryOn.Elastic.FSharp.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Elasticsearch.Net">

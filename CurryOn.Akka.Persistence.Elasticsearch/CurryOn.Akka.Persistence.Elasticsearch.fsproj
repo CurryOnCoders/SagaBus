@@ -57,8 +57,10 @@
     <Compile Include="Journal.fs" />
     <Compile Include="SnapshotStore.fs" />
     <Compile Include="Query.fs" />
+    <None Include="ReadMe.md" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
+    <None Include="CurryOn.Akka.Persistence.Elasticsearch" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Akka">
