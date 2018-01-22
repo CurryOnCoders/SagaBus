@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Akka.Persistence.Elasticsearch</id>
-    <version>0.1.0</version>
+    <version>0.1.0-beta</version>
     <title>Akka.Persistence.Elasticsearch</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
@@ -13,5 +13,26 @@
     <releaseNotes>Initial Release.</releaseNotes>
     <copyright>Copyright 2018</copyright>
     <tags>Akka Akka.net Persistence Elasticsearch Elastic Search event journal snapshot</tags>
+    <dependencies>
+      <dependency id="Akka" version="1.2.3" />
+      <dependency id="Akka.Persistence" version="1.2.3.43-beta" />
+      <dependency id="Akka.Persistence.FSharp" version="1.2.3.43-beta" />
+      <dependency id="Akka.Persistence.Query" version="1.2.3.43-beta" />
+      <dependency id="Akka.Serialization.Hyperion" version="1.2.3.43-beta" />
+      <dependency id="Akka.Streams" version="1.2.3" />
+      <dependency id="CurryOn.Elastic.FSharp" version="0.1.0" />
+      <dependency id="EventStore.Client" version="4.0.3" />
+      <dependency id="FSharp.Core" version="4.1.17" />
+      <dependency id="FsPickler" version="3.2.0" />
+      <dependency id="FsPickler.Json" version="3.2.0" />
+      <dependency id="Google.ProtocolBuffers" version="2.4.1.555" />
+      <dependency id="Hyperion" version="0.9.2" />
+      <dependency id="Microsoft.VisualStudio.Threading" version="15.4.4" />
+      <dependency id="Microsoft.VisualStudio.Validation" version="15.3.15" />
+      <dependency id="Newtonsoft.Json" version="9.0.1" />
+      <dependency id="Reactive.Streams" version="1.0.2" />
+      <dependency id="System.Collections.Immutable" version="1.3.1" />
+      <dependency id="System.ValueTuple" version="4.3.0" />
+    </dependencies>
   </metadata>
 </package>

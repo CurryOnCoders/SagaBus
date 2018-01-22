@@ -1,24 +1,21 @@
 ﻿<?xml version="1.0"?>
 <package >
   <metadata>
-    <id>CurryOn.Elastic.FSharp</id>
+    <id>CurryOn.Common</id>
     <version>0.1.0</version>
-    <title>CurryOn.Elastic.FSharp</title>
+    <title>CurryOn.Common</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
     <licenseUrl>https://github.com/CurryOnCoders/CurryOn/blob/master/LICENSE</licenseUrl>
-    <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Elastic.FSharp</projectUrl>
+    <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Common</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>An F#-idiomatch Library for Elasticsearch, including an F# DSL representation of the Elasticsearch Query Model, and F# modules for searching and indexing documents as well as creating and maintaining indexes.</description>
+    <description>A library of tools for F# development, used by other CurryOn packages for standard utilities and extensions.</description>
     <releaseNotes>Initial Release.</releaseNotes>
     <copyright>Copyright 2018</copyright>
-    <tags>F# FSharp Elasticsearch Elastic Search Query DSL</tags>
+    <tags>CurryOn Common F# FSharp Tools Utilities</tags>
     <dependencies>
       <dependency id="CurryOn.FSharp.Control" version="0.1.2" />
-      <dependency id="Elasticsearch.Net" version="5.6.0" />
       <dependency id="FSharp.Quotations.Evaluator" version="1.0.7" />
-      <dependency id="NEST" version="5.6.0" />
-      <dependency id="Newtonsoft.Json" version="10.0.1" />
       <dependency id="System.ValueTuple" version="4.3.0" />
     </dependencies>
   </metadata>

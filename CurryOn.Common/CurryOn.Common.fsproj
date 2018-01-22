@@ -67,6 +67,7 @@
     <Compile Include="Collections.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
+    <None Include="CurryOn.Common.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Quotations.Evaluator">
