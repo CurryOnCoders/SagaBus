@@ -30,7 +30,8 @@ module internal Settings =
 type ElasticsearchSerialization (serialization: Serialization) =
     new (actorSystem: ActorSystem) = ElasticsearchSerialization(actorSystem.Serialization)
     member __.Serialize (persistenceId, sender, sequenceNr, manifest, writerGuid, payload) =
-        { PersistenceId = persistenceId
+        { EventId = 0L;
+          PersistenceId = persistenceId
           SequenceNumber = sequenceNr
           EventType = manifest
           Sender = sender
@@ -46,26 +47,32 @@ type IElasticsearchPlugin =
     inherit IJournalPlugin
 
 type ElasticsearchPlugin (system: ActorSystem) =
-    let config = system.Settings.Config
-    let settings = config.GetConfig("akka.persistence.journal.elasticsearch") |> Settings.load
+    let config = system.Settings.Config.GetConfig("akka.persistence.journal.elasticsearch")
+    let settings = config |> Settings.load
+    let recreateIndices = config.GetBoolean("recreate-indices")
     let connection = settings |> Elasticsearch.connect
 
     do 
         operation {
             let existsMethod = typeof<IElasticClient>.GetMethod("IndexExists")
             let createMethod = typeof<IElasticClient>.GetMethod("CreateIndex", [||])
+            let recreateMethod = typeof<IElasticClient>.GetMethod("RecreateIndex")
             for indexMapping in settings.IndexMappings do
                 let exists = existsMethod.MakeGenericMethod(indexMapping.Type)
                 let create = createMethod.MakeGenericMethod(indexMapping.Type)
+                let recreate = recreateMethod.MakeGenericMethod(indexMapping.Type)
                 let! indexExists = exists.Invoke(connection, null) |> unbox<Operation<bool, ElasticsearchEvent>>
                 if indexExists |> not
                 then let! result = create.Invoke(connection, null) |> unbox<Operation<unit, ElasticsearchEvent>>
+                     result
+                elif recreateIndices
+                then let! result = recreate.Invoke(connection, null) |> unbox<Operation<unit, ElasticsearchEvent>>
                      result
             return! Result.success()
         } |> Operation.returnOrFail
 
     new (context: IActorContext) = ElasticsearchPlugin(context.System)    
     member __.Connect () = connection
-    member __.Config = config
+    member __.Config = system.Settings.Config
     member __.Serialization = ElasticsearchSerialization(system)
     member __.Materializer = ActorMaterializer.Create(system)

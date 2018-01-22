@@ -14,32 +14,40 @@ module internal Formats =
 type SerializedEvent = string
 type SerializedSnapshot = string
 
+//[<CLIMutable>]
+//[<Indexed("persisted_event")>]
+//type PersistingEvent =
+//    {
+//        [<ExactMatch("persistence_id")>]  PersistenceId: string
+//        [<ExactMatch("event_type")>]      EventType: string
+//        [<NonIndexedObject("sender")>]    Sender: IActorRef
+//        [<Int64("sequence_number")>]      SequenceNumber: int64
+//        [<ExactMatch("writer_id")>]       WriterId: string
+//        [<FullText("event")>]             Event: SerializedEvent
+//        [<ExactMatch("tags")>]            Tags: string []
+//    }
+//    interface IPersistentRepresentation with
+//        member __.IsDeleted = false
+//        member this.Manifest = this.EventType
+//        member this.PersistenceId = this.PersistenceId
+//        member this.Sender = this.Sender
+//        member this.SequenceNr = this.SequenceNumber
+//        member this.WriterGuid = this.WriterId
+//        member this.Payload = this.Event |> Serialization.parseJson<obj>
+//        member this.WithPayload payload = 
+//            {this with Event = payload |> Serialization.toJson} :> IPersistentRepresentation
+//        member this.WithManifest manifest = 
+//            {this with EventType = manifest} :> IPersistentRepresentation
+//        member this.Update (sequenceNr, persistenceId, _, sender, writerGuid) = 
+//            {this with SequenceNumber = sequenceNr; PersistenceId = persistenceId; Sender = sender; WriterId = writerGuid} :> IPersistentRepresentation
+
 [<CLIMutable>]
-[<Indexed("persisted_event")>]
-type PersistingEvent =
+[<Indexed("event_journal_metadata")>]
+type EventJournalMetadata =
     {
-        [<ExactMatch("persistence_id")>]  PersistenceId: string
-        [<ExactMatch("event_type")>]      EventType: string
-        [<NonIndexedObject("sender")>]    Sender: IActorRef
-        [<Int64("sequence_number")>]      SequenceNumber: int64
-        [<ExactMatch("writer_id")>]       WriterId: string
-        [<FullText("event")>]             Event: SerializedEvent
-        [<ExactMatch("tags")>]            Tags: string []
+        [<Int64("id")>]                       MaximumEventId: int64
+        [<Date("commit_date", Formats.Date)>] CommitDate: DateTime
     }
-    interface IPersistentRepresentation with
-        member __.IsDeleted = false
-        member this.Manifest = this.EventType
-        member this.PersistenceId = this.PersistenceId
-        member this.Sender = this.Sender
-        member this.SequenceNr = this.SequenceNumber
-        member this.WriterGuid = this.WriterId
-        member this.Payload = this.Event |> Serialization.parseJson<obj>
-        member this.WithPayload payload = 
-            {this with Event = payload |> Serialization.toJson} :> IPersistentRepresentation
-        member this.WithManifest manifest = 
-            {this with EventType = manifest} :> IPersistentRepresentation
-        member this.Update (sequenceNr, persistenceId, _, sender, writerGuid) = 
-            {this with SequenceNumber = sequenceNr; PersistenceId = persistenceId; Sender = sender; WriterId = writerGuid} :> IPersistentRepresentation
 
 [<CLIMutable>]
 [<Indexed("persisted_event", IdProperty = "EventId")>]

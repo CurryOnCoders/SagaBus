@@ -38,7 +38,7 @@ type ElasticsearchSnapshotStore (config: Config) =
                 { PersistenceId = metadata.PersistenceId
                   SnapshotType = snapshot.GetType().FullName
                   SequenceNumber = metadata.SequenceNr
-                  Timestamp = metadata.Timestamp
+                  Timestamp = metadata.Timestamp.ToUniversalTime()
                   State = snapshot |> Serialization.toJson
                 }
             let! result = client.Index({ Id = None; Document = persistedSnapshot }) |> Operation.waitTask
@@ -52,7 +52,7 @@ type ElasticsearchSnapshotStore (config: Config) =
                 |> Query.first<Snapshot> client None (Sort.descending <@ fun snapshot -> snapshot.SequenceNumber @>)
                 |> SearchOperation.toTask
             match firstSnapshot with
-            | Some snapshot -> return SelectedSnapshot(SnapshotMetadata(snapshot.PersistenceId, snapshot.SequenceNumber, snapshot.Timestamp), snapshot.State)
+            | Some snapshot -> return SelectedSnapshot(SnapshotMetadata(snapshot.PersistenceId, snapshot.SequenceNumber, snapshot.Timestamp), snapshot.State |> Serialization.parseJson<obj>)
             | None -> return null
         }
     

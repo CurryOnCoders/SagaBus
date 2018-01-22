@@ -57,7 +57,9 @@ module Helpers =
     let inline (?=) maybeNull defaultOption =
         if isNull maybeNull then defaultOption() else maybeNull
 
-    let inline (!) (lazyValue: Lazy<'a>) = lazyValue.Force()
+    /// Dereference both Lazy<'T> and ReferenceCell<'T> (or any type with a Value getter) using the ! operator
+    let inline (!) (cell: ^T when ^T : (member get_Value: unit -> 'a)) =
+         ( ^T : (member get_Value : unit -> 'a) cell)
 
     let inline ret anyInput anyValue = anyInput |> (fun _ -> anyValue)
 

@@ -300,68 +300,68 @@ module internal Elastic =
                         match dateRange.Maximum with
                         | Inclusive max -> sprintf "[%A TO %A]" (formatDate min) (formatDate max)
                         | Exclusive max -> sprintf "[%A TO %A}" (formatDate min) (formatDate max)
-                        | Unbounded ->sprintf "[%A to *]" (formatDate min)
+                        | Unbounded ->sprintf "[%A TO *]" (formatDate min)
                     | Exclusive min ->
                         match dateRange.Maximum with
                         | Inclusive max -> sprintf "{%A TO %A]" (formatDate min) (formatDate max)
                         | Exclusive max -> sprintf "{%A TO %A}" (formatDate min) (formatDate max)
-                        | Unbounded -> sprintf "{%A to *}" (formatDate min)
+                        | Unbounded -> sprintf "{%A TO *}" (formatDate min)
                     | Unbounded ->
                         match dateRange.Maximum with
                         | Inclusive max -> sprintf "[* TO %A]" (formatDate max)
                         | Exclusive max -> sprintf "[* TO %A}" (formatDate max) 
-                        | Unbounded -> "[* to *]"
+                        | Unbounded -> "[* TO *]"
                 | IntegerRange intRange ->
                     match intRange.Minimum with
                     | Inclusive min ->
                         match intRange.Maximum with
                         | Inclusive max -> sprintf "[%d TO %d]" min max
                         | Exclusive max -> sprintf "[%d TO %d}" min max
-                        | Unbounded -> sprintf "[%d to *]" min
+                        | Unbounded -> sprintf "[%d TO *]" min
                     | Exclusive min ->
                         match intRange.Maximum with
                         | Inclusive max -> sprintf "{%d TO %d]" min max
                         | Exclusive max -> sprintf "{%d TO %d}" min max
-                        | Unbounded -> sprintf "{%d to *}" min
+                        | Unbounded -> sprintf "{%d TO *}" min
                     | Unbounded ->
                         match intRange.Maximum with
                         | Inclusive max -> sprintf "[* TO %d]" max
                         | Exclusive max -> sprintf "[* TO %d}" max
-                        | Unbounded -> "[* to *]"
+                        | Unbounded -> "[* TO *]"
                 | DecimalRange decRange ->
                     match decRange.Minimum with
                     | Inclusive min ->
                         match decRange.Maximum with
                         | Inclusive max -> sprintf "[%f TO %f]" min max
                         | Exclusive max -> sprintf "[%f TO %f}" min max
-                        | Unbounded -> sprintf "[%f to *]" min
+                        | Unbounded -> sprintf "[%f TO *]" min
                     | Exclusive min ->
                         match decRange.Maximum with
                         | Inclusive max -> sprintf "{%f TO %f]" min max
                         | Exclusive max -> sprintf "{%f TO %f}" min max
-                        | Unbounded -> sprintf "{%f to *}" min
+                        | Unbounded -> sprintf "{%f TO *}" min
                     | Unbounded ->
                         match decRange.Maximum with
                         | Inclusive max -> sprintf "[* TO %f]" max
                         | Exclusive max -> sprintf "[* TO %f}" max
-                        | Unbounded -> "[* to *]"
+                        | Unbounded -> "[* TO *]"
                 | TagRange tagRange ->
                     match tagRange.Minimum with
                     | Inclusive min ->
                         match tagRange.Maximum with
                         | Inclusive max -> sprintf "[%A TO %A]" min max
                         | Exclusive max -> sprintf "[%A TO %A}" min max
-                        | Unbounded -> sprintf "[%A to *]" min
+                        | Unbounded -> sprintf "[%A TO *]" min
                     | Exclusive min ->
                         match tagRange.Maximum with
                         | Inclusive max -> sprintf "{%A TO %A]" min max
                         | Exclusive max -> sprintf "{%A TO %A}" min max
-                        | Unbounded -> sprintf "{%A to *}" min
+                        | Unbounded -> sprintf "{%A TO *}" min
                     | Unbounded ->
                         match tagRange.Maximum with
                         | Inclusive max -> sprintf "[* TO %A]" max
                         | Exclusive max -> sprintf "[* TO %A}" max
-                        | Unbounded -> "[* to *]"
+                        | Unbounded -> "[* TO *]"
                 | FieldAnd (left,right) -> sprintf "(%s) AND (%s)" (fieldTermToString left) (fieldTermToString right)
                 | FieldOr (left,right) -> sprintf "(%s) OR (%s)" (fieldTermToString left) (fieldTermToString right)
                 | FieldNot notTerm -> sprintf "NOT (%s)" (fieldTermToString notTerm)

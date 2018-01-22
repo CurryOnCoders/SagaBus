@@ -31,9 +31,10 @@ type ElasticsearchPersistenceTests () =
                     uri = "http://localhost:9200"
                     write-batch-size = 4095
                     read-batch-size = 4095
+                    recreate-indices = false
                     index-mappings {
                         "event_journal" = "Akka.Persistence.Elasticsearch.PersistedEvent, CurryOn.Akka.Persistence.Elasticsearch"
-                        "event_journal" = "Akka.Persistence.Elasticsearch.PersistingEvent, CurryOn.Akka.Persistence.Elasticsearch"
+                        "metadata_store" = "Akka.Persistence.Elasticsearch.EventJournalMetadata, CurryOn.Akka.Persistence.Elasticsearch"
                         "snapshot_store" = "Akka.Persistence.Elasticsearch.Snapshot, CurryOn.Akka.Persistence.Elasticsearch"
                     }
                 }
@@ -46,7 +47,7 @@ type ElasticsearchPersistenceTests () =
                     read-batch-size = 4095
                     index-mappings {
                         "event_journal" = "Akka.Persistence.Elasticsearch.PersistedEvent, CurryOn.Akka.Persistence.Elasticsearch"
-                        "event_journal" = "Akka.Persistence.Elasticsearch.PersistingEvent, CurryOn.Akka.Persistence.Elasticsearch"
+                        "metadata_store" = "Akka.Persistence.Elasticsearch.EventJournalMetadata, CurryOn.Akka.Persistence.Elasticsearch"
                         "snapshot_store" = "Akka.Persistence.Elasticsearch.Snapshot, CurryOn.Akka.Persistence.Elasticsearch"
                     }
                 }
@@ -56,6 +57,7 @@ type ElasticsearchPersistenceTests () =
 
         let configuration = Configuration.parse hocon
         actorSystem := System.create "company" configuration
+        actorSystem.Value.Settings.Loggers.Add(typeof<DebugOutputLogger>.AssemblyQualifiedName)
         
 
     [<TestMethod()>]
@@ -67,9 +69,9 @@ type ElasticsearchPersistenceTests () =
         employees <! {Name = "Rob Hobbit"; Position = "Currier"; Salary = 54862.95M}
         employees <! {Name = "Gerald Munk"; Position = "Lambda Invoker"; Salary = 48350.85M}
 
-        sleep 2
+        sleep 3
         employees <! TakeSnapshot
-        sleep 1
+        sleep 2
 
         let (allEmployees: Employee list) = employees <? GetEmployees |> Async.RunSynchronously
         Assert.AreEqual(3, allEmployees.Length)

@@ -56,7 +56,7 @@
     <Compile Include="EventStorePersistenceTests.fs" />
     <Compile Include="ElasticsearchPersistenceTests.fs" />
     <Content Include="App.config" />
-    <None Include="Script.fsx" />
+    <None Include="CleanupElastic.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>

@@ -26,11 +26,35 @@ module internal EventJournal =
 
 type ElasticsearchJournal (config: Config) = 
     inherit AsyncWriteJournal()
+    static let semaphore = new SemaphoreSlim(1, 1)
+    static let journalId = Guid.NewGuid()
     let context = AsyncWriteJournal.Context
     let plugin = ElasticsearchPlugin(context)
     let writeBatchSize = lazy(config.GetInt("write-batch-size"))
     let readBatchSize = lazy(config.GetInt("read-batch-size"))
     let client = plugin.Connect () 
+
+    let maximumEventId =
+        operation {
+            let! eventMetadata = 
+                Dsl.matchAll<EventJournalMetadata> None
+                |> Dsl.first<EventJournalMetadata> client None (Sort.descending <@ fun metadata -> metadata.CommitDate @>)                    
+            return! Result.success <|
+                match eventMetadata with
+                | Some metadata -> metadata.MaximumEventId
+                | None -> 0L
+        } |> Operation.returnOrFail |> ref
+
+    let getEventIds numberOfIds =
+        operation {          
+            do! semaphore.WaitAsync()
+            try 
+                let eventIds = [for _ in {1..numberOfIds} do yield Interlocked.Increment(maximumEventId)]
+                let! metaResult = client.Index({ Id = None; Document = {MaximumEventId = !maximumEventId; CommitDate = DateTime.UtcNow}})
+                return! Result.success eventIds
+            finally 
+                semaphore.Release() |> ignore
+        }
 
     override this.WriteMessagesAsync messages =
         task {
@@ -45,18 +69,22 @@ type ElasticsearchJournal (config: Config) =
                                 match persistentMessage |> box with
                                 | :? Tagged as tagged -> tagged.Tags |> Seq.toArray
                                 | _ -> [||] 
-                            { PersistenceId = persistentMessage.PersistenceId 
+                            { EventId = 0L;
+                              PersistenceId = persistentMessage.PersistenceId 
                               EventType = persistentMessage.Payload |> getFullTypeName
                               Sender = persistentMessage.Sender
                               SequenceNumber = persistentMessage.SequenceNr
                               Event = persistentMessage.Payload |> Serialization.toJson
                               WriterId = persistentMessage.WriterGuid
                               Tags = tags}) |> Seq.toList
-                        match events with
+
+                        let! eventIds = getEventIds events.Length
+
+                        match events |> List.mapi (fun index event -> {event with EventId = eventIds.[index]}) with
                         | [] -> 
                             return! Result.success List<DocumentId>.Empty
                         | [event] ->
-                            let! result = client.Index({ Id = None; Document = event})
+                            let! result = client.Index({ Id = Some <| IntegerId event.EventId; Document = event})
                             return! Result.success [result.Id]
                         | events -> 
                             let! result = client.BulkIndex(events)
@@ -75,7 +103,9 @@ type ElasticsearchJournal (config: Config) =
                         |> List.filter (fun opt -> opt.IsSome) 
                         |> List.map (fun opt -> opt.Value)
                     acc @ exceptions) List<exn>.Empty
-            return ImmutableList.CreateRange(errors) :> IImmutableList<exn>
+            return match errors with
+                   | [] -> null
+                   | _ -> ImmutableList.CreateRange(errors) :> IImmutableList<exn>
         }
 
     override this.DeleteMessagesToAsync (persistenceId, sequenceNumber) =
