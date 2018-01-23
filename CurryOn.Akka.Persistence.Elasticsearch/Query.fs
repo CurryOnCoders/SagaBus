@@ -15,7 +15,7 @@ open System.Collections.Generic
 type ElasticsearchReadJournal (system: ExtendedActorSystem) =
     let serialization = ElasticsearchSerialization(system)
     let plugin = ElasticsearchPlugin(system)
-    let config = lazy(system.Settings.Config.GetConfig("akka.persistence.journal.elasticsearch"))
+    let config = lazy(system.Settings.Config.GetConfig("akka.persistence.query.journal.elasticsearch"))
     let readBatchSize = lazy(config.Value.GetInt("read-batch-size"))
     let client = plugin.Connect()
     
@@ -109,7 +109,7 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
                             |> Seq.filter (fun event -> event.PersistenceId = register.PersistenceId && event.SequenceNr >= register.FromSequence && event.SequenceNr <= register.ToSequence) 
                             |> Seq.iter register.Subscriber.OnNext
                         | NewEvent event ->                             
-                            if knownEvents.Add(event)
+                            if knownEvents.Add(event) && subscribers.ContainsKey(event.PersistenceId)
                             then subscribers.[event.PersistenceId] |> Seq.iter (fun subscriber -> subscriber.OnNext event)
                         return! messageLoop ()
                     }
@@ -152,7 +152,7 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
             return! Result.success actor
         } |> Operation.returnOrFail
 
-    static member Identifier = "elasticsearch.persistence.query"
+    static member Identifier = "akka.persistence.query.journal.elasticsearch"
 
     member __.CurrentEventsByPersistenceId (persistenceId, fromSequence, toSequence) =
         Source.FromPublisher
@@ -168,7 +168,7 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
                         match event.ToException() with
                         | Some error -> subscriber.OnError error
                         | None -> ())
-                    | _ -> ()
+                    | _ -> subscriber.OnComplete()
             }
 
     member __.CurrentEventsByTag (tag, offset) =
@@ -185,7 +185,7 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
                         match event.ToException() with
                         | Some error -> subscriber.OnError error
                         | None -> ())
-                    | _ -> ()
+                    | _ -> subscriber.OnComplete()
             }
 
     member __.CurrentPersistenceIds () =
@@ -195,6 +195,7 @@ type ElasticsearchReadJournal (system: ExtendedActorSystem) =
                     operation {
                         let! persistenceIds = getCurrentPersistenceIds () 
                         persistenceIds |> List.iter subscriber.OnNext
+                        subscriber.OnComplete()
                     } |> Operation.returnOrFail
             }
 

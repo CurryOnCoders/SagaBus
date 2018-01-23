@@ -93,6 +93,9 @@
     <Reference Include="Akka.TestKit">
       <HintPath>..\packages\Akka.TestKit.1.2.3\lib\net45\Akka.TestKit.dll</HintPath>
     </Reference>
+    <Reference Include="Elasticsearch.Net">
+      <HintPath>..\packages\Elasticsearch.Net.5.6.0\lib\net46\Elasticsearch.Net.dll</HintPath>
+    </Reference>
     <Reference Include="EventStore.ClientAPI">
       <HintPath>..\packages\EventStore.Client.4.0.3\lib\net40\EventStore.ClientAPI.dll</HintPath>
     </Reference>
@@ -125,6 +128,9 @@
       <HintPath>..\..\..\..\..\Program Files (x86)\Microsoft Visual Studio\2017\Enterprise\Common7\IDE\ReferenceAssemblies\v4.0\Microsoft.VisualStudio.QualityTools.UnitTestFramework.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
+    <Reference Include="Nest">
+      <HintPath>..\packages\NEST.5.6.0\lib\net46\Nest.dll</HintPath>
+    </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\packages\Newtonsoft.Json.10.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
@@ -159,6 +165,16 @@
     <ProjectReference Include="..\CurryOn.Common\CurryOn.Common.fsproj">
       <Name>CurryOn.Common</Name>
       <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\CurryOn.Elastic.FSharp\CurryOn.Elastic.FSharp.fsproj">
+      <Name>CurryOn.Elastic.FSharp</Name>
+      <Project>{ef3be7ff-1fb2-43ed-a24b-b6368392a1ff}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\CurryOn.FSharp.Control\CurryOn.FSharp.Control.fsproj">
+      <Name>CurryOn.FSharp.Control</Name>
+      <Project>{b8b2e096-c261-45fc-bfba-0cea330d6b04}</Project>
       <Private>True</Private>
     </ProjectReference>
   </ItemGroup>

@@ -6,14 +6,8 @@ open System.Threading.Tasks
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module OperationBuilder =
-    /// An exception type to be used when executing operation steps, to set a failed result without
-    /// losing any domain events that have occurred on previous steps of the Operation
-    type IntermediateOperationEventsException<'event>(events: 'event list) =
-        inherit Exception(String.Join(",\r\n", events |> List.map (fun e -> e.ToString())))
-        member __.Events = events
-        
     /// Convert a list of domain events into an Exception (for use when creating a failed task)
-    let inline private failEx events = IntermediateOperationEventsException(events)
+    let inline private failEx events = OperationFailedException(events)
 
     /// Extensions to Task<'a> to support creating failed tasks from exceptions and domain events
     type Task<'a> with
@@ -326,11 +320,7 @@ module OperationBuilder =
         // Any exceptions should become a Completed Failure Operation, rather than being thrown from this call.
         // This matches C# Task Async behavior where you won't see an exception until awaiting the task,
         // even if it failed before reaching the first "await".
-        with | :? IntermediateOperationEventsException<'event> as ex -> Completed <| Failure ex.Events
-             | :? AggregateException as aggEx -> 
-                match Result.unwrapAggregateException aggEx with
-                | :? IntermediateOperationEventsException<'event> as ex -> Completed <| Failure ex.Events
-                | ex -> Operation.ofException<'result,'event> ex
+        with | :? OperationFailedException<'event> as ex -> Completed <| Failure ex.Events
              | ex -> Operation.ofException<'result,'event> ex
 
     /// Runs an OperationStep as a task -- with a short-circuit for immediately completed steps.

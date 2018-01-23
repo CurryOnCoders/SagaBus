@@ -9,22 +9,32 @@ open FSharp.Control
 open System
 
 module internal Settings =
+    let mappings =
+        [{Type = typeof<PersistedEvent>; IndexName = "event_journal"; TypeName = "persisted_event"};
+         {Type = typeof<Snapshot>; IndexName = "snapshot_store"; TypeName = "snapshot"};
+         {Type = typeof<EventJournalMetadata>; IndexName = "metadata_store"; TypeName = "event_journal_metadata"}]
+
     let load (config: Akka.Configuration.Config) =
         { Node = config.GetString("uri", "http://localhost:9200") |> Uri
           DisableDirectStreaming = config.GetBoolean("disable-direct-streaming", false)
           RequestTimeout = config.GetTimeSpan("requestt-timeout", TimeSpan.FromMinutes(1.0) |> Nullable)
-          IndexMappings = config.GetConfig("index-mappings").AsEnumerable() |> Seq.map (fun keyValue -> 
-            try
-                let clrType = Type.GetType(keyValue.Value.GetString())
-                match clrType.GetCustomAttributes(typeof<Nest.ElasticsearchTypeAttribute>, true) with
-                | [||] -> None
-                | array ->  
-                    let typeName = array |> Seq.head |> unbox<Nest.ElasticsearchTypeAttribute> |> fun a -> a.Name
-                    Some { Type = clrType; TypeName = typeName; IndexName = keyValue.Key }                
-            with | _ -> None)
-            |> Seq.filter (fun opt -> opt.IsSome)
-            |> Seq.map (fun opt -> opt.Value)
-            |> Seq.toList
+          IndexMappings = 
+            let configuredMappings = config.GetConfig("index-mappings")
+            if configuredMappings |> isNull
+            then []
+            else configuredMappings.AsEnumerable() |> Seq.map (fun keyValue -> 
+                    try
+                        let clrType = Type.GetType(keyValue.Value.GetString())
+                        match clrType.GetCustomAttributes(typeof<Nest.ElasticsearchTypeAttribute>, true) with
+                        | [||] -> None
+                        | array ->  
+                            let typeName = array |> Seq.head |> unbox<Nest.ElasticsearchTypeAttribute> |> fun a -> a.Name
+                            Some { Type = clrType; TypeName = typeName; IndexName = keyValue.Key }                
+                    with | _ -> None)
+                    |> Seq.filter (fun opt -> opt.IsSome)
+                    |> Seq.map (fun opt -> opt.Value)
+                    |> Seq.toList
+            
         }
 
 type ElasticsearchSerialization (serialization: Serialization) =
@@ -48,7 +58,9 @@ type IElasticsearchPlugin =
 
 type ElasticsearchPlugin (system: ActorSystem) =
     let config = system.Settings.Config.GetConfig("akka.persistence.journal.elasticsearch")
-    let settings = config |> Settings.load
+    let settings = 
+        let elasticSettings = config |> Settings.load
+        {elasticSettings with IndexMappings = elasticSettings.IndexMappings @ Settings.mappings}
     let recreateIndices = config.GetBoolean("recreate-indices")
     let connection = settings |> Elasticsearch.connect
 

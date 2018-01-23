@@ -59,6 +59,12 @@ type OperationResult<'result,'event> =
         | Success successfulResult -> sprintf "OK: %A - %s" successfulResult.Result (String.Join(Environment.NewLine, successfulResult.Events |> Seq.map (fun x -> x.ToString())))
         | Failure errors -> sprintf "Error: %s" (String.Join(Environment.NewLine, errors |> Seq.map (fun x -> x.ToString())))    
 
+/// An exception type to be used when interoperating between executing operations and Tasks, 
+/// to set a failed result without losing any domain events that have occurred.
+ type OperationFailedException<'event>(events) =
+    inherit Exception(sprintf "Operation Failed: %s" <| String.Join(",\r\n", events |> List.map (sprintf "%A")))
+    member __.Events: 'event list = events
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Result =
     type UnionCaseInfo with member this.Fields = this.GetFields()
@@ -79,20 +85,20 @@ module Result =
         else aggregate :> exn
 
     /// Converts a System.Exception to an instance of the 'event type and then creates a Failure OperationResult with that event
-    let inline ofException<'result,'event> (except: exn) =
-        let ex = 
-            match except with
-            | :? AggregateException as agg -> unwrapAggregateException agg
-            | _ -> except
-        let union = FSharpType.GetUnionCases(typeof<OperationResult<'result, 'event>>)
-        if typeof<'event>.IsAssignableFrom(typeof<exn>)
-        then FSharpValue.MakeUnion(union.[1], [|[ex] |> box|]) |> unbox<OperationResult<'result, 'event>>
-        elif FSharpType.IsUnion typeof<'event>
-        then let cases = FSharpType.GetUnionCases(typeof<'event>)
-             match cases |> Seq.tryFind (fun case -> case.Fields.Length = 1 && case.Fields.[0].PropertyType.IsAssignableFrom(typeof<exn>)) with
-             | Some case -> FSharpValue.MakeUnion(union.[1], [|[FSharpValue.MakeUnion(case, [|ex |> box|]) |> unbox<'event>] |> box|]) |> unbox<OperationResult<'result, 'event>>
-             | None -> failwithf "No Union Case of Event Type %s Supports Construction from an Unhandled Exception: \r\n%O" typeof<'event>.Name ex
-        else failwithf "Unable To Construct a Failure of type %s from Unhandled Exception: \r\n%O" typeof<'event>.Name ex
+    let rec ofException<'result,'event> (except: exn) =
+        match except with
+        | :? AggregateException as agg -> unwrapAggregateException agg |> ofException<'result,'event>
+        | :? OperationFailedException<'event> as fail -> failure fail.Events
+        | ex -> 
+            let union = FSharpType.GetUnionCases(typeof<OperationResult<'result, 'event>>)
+            if typeof<'event>.IsAssignableFrom(typeof<exn>)
+            then FSharpValue.MakeUnion(union.[1], [|[ex] |> box|]) |> unbox<OperationResult<'result, 'event>>
+            elif FSharpType.IsUnion typeof<'event>
+            then let cases = FSharpType.GetUnionCases(typeof<'event>)
+                 match cases |> Seq.tryFind (fun case -> case.Fields.Length = 1 && case.Fields.[0].PropertyType.IsAssignableFrom(typeof<exn>)) with
+                 | Some case -> FSharpValue.MakeUnion(union.[1], [|[FSharpValue.MakeUnion(case, [|ex |> box|]) |> unbox<'event>] |> box|]) |> unbox<OperationResult<'result, 'event>>
+                 | None -> failwithf "No Union Case of Event Type %s Supports Construction from an Unhandled Exception: \r\n%O" typeof<'event>.Name ex
+            else failwithf "Unable To Construct a Failure of type %s from Unhandled Exception: \r\n%O" typeof<'event>.Name ex
 
     /// Merge the results and the domain events of two OperationResults
     let inline merge (result1: OperationResult<unit,'event>) (result2: OperationResult<'result,'event>) =
@@ -156,10 +162,7 @@ module Result =
     /// Otherwise the function throws an exception with the Failure message of the result.
     let inline returnOrFail result = 
         let inline raiseExn events = 
-            events
-            |> Seq.map (sprintf "%A")
-            |> String.concat (sprintf "%s\t" Environment.NewLine)
-            |> failwith
+            raise <| OperationFailedException<'b>(events)
         either fst raiseExn result
 
     /// If the OperationResult is a Success it executes the given function on the value.

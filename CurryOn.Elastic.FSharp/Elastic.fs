@@ -827,10 +827,10 @@ module internal Elastic =
     let distinctValues<'index,'field when 'index: not struct> (client: ElasticClient) (request: DistinctValuesRequest<'field>) =
         operation {
             let name = sprintf "distinct_%s_agg" request.Field
-            let size = if request.Size.IsSome then request.Size.Value else 0
+            let size = if request.Size.IsSome then request.Size.Value else 100000 // Size must be positive as of Elasticsearch 5.0 -- no longer supports 0 = all
             let! response = client.SearchAsync<'index>(fun (s: SearchDescriptor<'index>) -> 
                 s.Aggregations(fun a -> a.Terms(name, fun t -> 
-                    t.Field(field request.Field).Size(size) :> ITermsAggregation) :> IAggregationContainer) :> ISearchRequest)
+                    t.Field(field <| sprintf "%s.keyword" request.Field).Size(size) :> ITermsAggregation) :> IAggregationContainer) :> ISearchRequest)
             return! if response.IsValid
                     then let distinctResponse =
                             { ElapsedTime = response.Took |> float |> TimeSpan.FromMilliseconds

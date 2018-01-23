@@ -64,14 +64,23 @@ module Search =
             
     /// Select the Top n documents matching the given query ordered by the given sort
     let inline top<'index when 'index: not struct> client timeout sort n search =
-        search |> execute<'index> client timeout (Some sort) None (Some n)
+        search |> execute<'index> client timeout sort None (Some n)
+
+    /// Select the Top 1 document matching the given query ordered by the given sort
+    let inline private head<'index when 'index: not struct> client timeout sort search (headOp: 'index list -> 'index option) = 
+        operation {
+            let! topResult = search |> top<'index> client timeout sort 1
+            return! topResult.Results.Hits |> List.map (fun hit -> hit.Document) |> headOp |> Result.success
+        }
 
     /// Select the Top 1 document matching the given query ordered by the given sort
     let inline first<'index when 'index: not struct> client timeout sort search = 
-        operation {
-            let! topResult = search |> top<'index> client timeout sort 1
-            return! topResult.Results.Hits |> List.map (fun hit -> hit.Document) |> List.tryHead |> Result.success
-        }
+       List.tryHead |> head<'index> client timeout (Some sort) search 
+
+    /// Take the only document matching the given query from the index.
+    /// If more than one document matches the query, the result is None
+    let inline single<'index when 'index: not struct> client timeout search =
+        (fun hits -> try hits |> List.exactlyOne |> Some with | _ -> None) |> head<'index> client timeout None search
 
     /// Select the Distinct Values and their Document Counts for the given field in the Elasticsearch Index
     let inline distinct<'index,'field when 'index: not struct> (getField: Expr<'index -> 'field>) size (client: CurryOn.Elastic.IElasticClient) =
@@ -119,6 +128,11 @@ module Query =
     /// Select the Top 1 document matching the given query ordered by the given sort
     let inline first<'index when 'index: not struct> client timeout sort query = 
         query |> build |> Search.first<'index> client timeout sort
+
+    /// Take the only document matching the given query from the index.
+    /// If more than one document matches the query, the result is None
+    let inline single<'index when 'index: not struct> client timeout query = 
+        query |> build |> Search.single<'index> client timeout
 
 module Dsl =
     /// Create an Elasticsearch Query DSL 'Term' Query Clause
@@ -177,3 +191,8 @@ module Dsl =
     /// Select the Top 1 document matching the given Query DSL clause ordered by the given sort
     let inline first<'index when 'index: not struct> client timeout sort clause = 
         clause |> build |> Search.first<'index> client timeout sort
+
+    /// Take the only document matching the given query from the index.
+    /// If more than one document matches the query, the result is None
+    let inline single<'index when 'index: not struct> client timeout clause = 
+        clause |> build |> Search.single<'index> client timeout
