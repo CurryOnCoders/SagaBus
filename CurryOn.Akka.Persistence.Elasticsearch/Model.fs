@@ -111,7 +111,8 @@ module internal Messages =
 
     type EventSubscriptionCommands =
         | Continue
-        | EventAppended
+        | EventAppended of string
+        | TaggedEventAppended of string
 
     type ReplayCommands =
         | ReplayTaggedMessages of int64*int64*string*IActorRef

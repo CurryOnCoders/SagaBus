@@ -17,6 +17,7 @@ module internal Settings =
 
     let load (config: Akka.Configuration.Config) =
         { Node = config.GetString("uri", "http://localhost:9200") |> Uri
+          DefaultIndex = Some "event_journal"
           DisableDirectStreaming = config.GetBoolean("disable-direct-streaming", false)
           RequestTimeout = config.GetTimeSpan("requestt-timeout", TimeSpan.FromMinutes(1.0) |> Nullable)
           IndexMappings = 

@@ -50,12 +50,17 @@ type ElasticsearchJournal (config: Config) as journal =
 
     let maybeNewPersistenceId persistenceId =
         let isNew = 
-            if allPersistenceIds.Contains persistenceId
-            then false
-            else allPersistenceIds <- allPersistenceIds.Add persistenceId
-                 true
+            try allPersistenceIdsLock.EnterUpgradeableReadLock()
+                if allPersistenceIds.Contains persistenceId
+                then false
+                else try allPersistenceIdsLock.EnterWriteLock()
+                         allPersistenceIds <- allPersistenceIds.Add persistenceId
+                         true
+                     finally allPersistenceIdsLock.ExitWriteLock()
+            finally allPersistenceIdsLock.ExitUpgradeableReadLock()
         if isNew 
         then allPersistenceIdSubscribers |> Set.iter (fun subscriber -> subscriber <! PersistenceIdAdded(persistenceId))
+        isNew
 
     let getEventsByTag = PersistenceQuery.getCurrentEventsByTag client
     let getPersistenceIds () = PersistenceQuery.getCurrentPersistenceIds client
@@ -82,6 +87,18 @@ type ElasticsearchJournal (config: Config) as journal =
                 semaphore.Release() |> ignore
         }
 
+    let notifyPersistenceIdChange persistenceId =
+        match persistenceIdSubscribers.TryGetValue(persistenceId) with
+        | (true, subscribers) ->
+            for subscriber in subscribers do subscriber <! EventAppended persistenceId
+        | _ -> ()
+
+    let notifyTagChange tag =
+        match tagSubscribers.TryGetValue(tag) with
+        | (true, subscribers) ->
+            for subscriber in subscribers do subscriber <! TaggedEventAppended tag
+        | _ -> ()
+
     do match getPersistenceIds () |> Operation.wait with
        | Success success -> success.Result |> Seq.iter (fun persistenceId -> allPersistenceIds <- allPersistenceIds.Add persistenceId)
        | Failure errors -> raise <| OperationFailedException(errors)
@@ -92,6 +109,8 @@ type ElasticsearchJournal (config: Config) as journal =
 
     override this.WriteMessagesAsync messages =
         task {
+            let newPersistenceIds = Collections.Generic.HashSet<string>()
+            let newTags = Collections.Generic.HashSet<string>()
             let indexOperations = 
                 messages 
                 |> Seq.map (fun message ->
@@ -101,7 +120,10 @@ type ElasticsearchJournal (config: Config) as journal =
                             let eventType = persistentMessage.Payload |> getTypeName
                             let tags = 
                                 match persistentMessage |> box with
-                                | :? Tagged as tagged -> tagged.Tags |> Seq.toArray
+                                | :? Tagged as tagged -> 
+                                    let eventTags = tagged.Tags |> Seq.toArray
+                                    eventTags |> Seq.iter (newTags.Add >> ignore)
+                                    eventTags
                                 | _ -> [||] 
                             { EventId = 0L;
                               PersistenceId = persistentMessage.PersistenceId 
@@ -119,11 +141,14 @@ type ElasticsearchJournal (config: Config) as journal =
                             return! Result.success List<DocumentId>.Empty
                         | [event] ->
                             let! result = client.Index({ Id = Some <| IntegerId event.EventId; Document = event})
-                            maybeNewPersistenceId event.PersistenceId
+                            if maybeNewPersistenceId event.PersistenceId
+                            then newPersistenceIds.Add(event.PersistenceId) |> ignore
                             return! Result.success [result.Id]
                         | events -> 
                             let! result = client.BulkIndex(events)
-                            events |> Seq.iter (fun event -> maybeNewPersistenceId event.PersistenceId)
+                            events |> Seq.iter (fun event -> 
+                                if maybeNewPersistenceId event.PersistenceId
+                                then newPersistenceIds.Add(event.PersistenceId) |> ignore)
                             return! result.Results |> List.map (fun r -> r.Id) |> Result.success
                     })          
                 |> Operation.Parallel
@@ -139,6 +164,13 @@ type ElasticsearchJournal (config: Config) as journal =
                         |> List.filter (fun opt -> opt.IsSome) 
                         |> List.map (fun opt -> opt.Value)
                     acc @ exceptions) List<exn>.Empty
+
+            if persistenceIdSubscribers.IsEmpty |> not
+            then newPersistenceIds |> Seq.iter notifyPersistenceIdChange
+
+            if tagSubscribers.IsEmpty |> not
+            then newTags |> Seq.iter notifyTagChange
+
             return match errors with
                    | [] -> null
                    | _ -> ImmutableList.CreateRange(errors) :> IImmutableList<exn>

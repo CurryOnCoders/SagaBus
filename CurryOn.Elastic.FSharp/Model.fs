@@ -17,13 +17,18 @@ type ElasticSettings =
         Node: Uri
         DisableDirectStreaming: bool
         RequestTimeout: TimeSpan
+        DefaultIndex: string option
         IndexMappings: TypeIndexMapping list
     } member internal this.GetConnectionSettings () =
         let connectionSettings = new Nest.ConnectionSettings(this.Node)
         let apply (settings: Nest.ConnectionSettings) =
-            settings.RequestTimeout(this.RequestTimeout)
-                    .MapDefaultTypeIndices(fun dict ->
-                        this.IndexMappings |> List.fold (fun (acc: Nest.FluentDictionary<Type,string>) map -> acc.Add(map.Type, map.IndexName)) dict |> ignore)
+            let connSettings = 
+                match this.DefaultIndex with
+                | Some index -> settings.DefaultIndex(index)
+                | None -> settings
+            connSettings.RequestTimeout(this.RequestTimeout)
+                        .MapDefaultTypeIndices(fun dict ->
+                            this.IndexMappings |> List.fold (fun (acc: Nest.FluentDictionary<Type,string>) map -> acc.Add(map.Type, map.IndexName)) dict |> ignore)
         if this.DisableDirectStreaming
         then connectionSettings.DisableDirectStreaming() |> apply
         else connectionSettings |> apply                    
