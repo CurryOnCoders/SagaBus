@@ -132,3 +132,49 @@ let multiParameterFunction = memoize <| fun (x, y, z) ->
     (x * y) / z
 
 multiParameterFunction (6,13,4)
+
+
+#load "ImmutableQueue.fs"
+
+open CurryOn.Common
+open System.Threading
+
+let mutable queue = Queue.empty<string>
+let index = ref 0
+
+let nextMessage () = sprintf "Message %d" (Interlocked.Increment index)
+
+for i in [1..100] do
+    queue <- queue.Enqueue <| nextMessage ()
+
+queue <- [1..1000] |> List.map (fun _ -> nextMessage()) |> queue.EnqueueAll
+
+while queue.IsEmpty |> not do
+    let (message, remaining) = queue.Dequeue()
+    printfn "Dequeued %s" message
+    queue <- remaining
+
+let rec dequeueAll (queue: string ImmutableQueue) =
+    match queue.TryDequeue () with
+    | Some (message, remaining) ->
+       printfn "Dequeued %s" message
+       dequeueAll remaining
+    | None -> ()
+
+dequeueAll queue
+
+let newQueue =
+    queue 
+    |> Queue.enqueue (nextMessage())
+    |> Queue.enqueue (nextMessage())
+    |> Queue.dequeue
+    |> (fun (_,q) -> q |> Queue.enqueue (nextMessage()))
+    |> Queue.enqueue (nextMessage())
+    |> Queue.dequeue
+    |> (fun (_,q) -> q |> Queue.dequeue)
+    |> (fun (_,q) -> q |> Queue.enqueue (nextMessage()))
+    |> Queue.enqueueAll ([1..10] |> List.map (fun _ -> nextMessage()))
+    |> Queue.dequeue
+    |> (fun (_,q) -> q |> Queue.enqueue (nextMessage()))
+
+dequeueAll newQueue

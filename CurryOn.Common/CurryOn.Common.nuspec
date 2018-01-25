@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Common</id>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
     <title>CurryOn.Common</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
@@ -10,7 +10,7 @@
     <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Common</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>A library of tools for F# development, used by other CurryOn packages for standard utilities and extensions.</description>
-    <releaseNotes>Initial Release.</releaseNotes>
+    <releaseNotes>Added ImmutableQueue type.</releaseNotes>
     <copyright>Copyright 2018</copyright>
     <tags>CurryOn Common F# FSharp Tools Utilities</tags>
     <dependencies>

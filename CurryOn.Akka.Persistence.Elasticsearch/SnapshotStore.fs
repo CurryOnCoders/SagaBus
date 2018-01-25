@@ -4,6 +4,7 @@ open Akka.Actor
 open Akka.Configuration
 open Akka.Persistence
 open Akka.Persistence.Snapshot
+open CurryOn.Akka
 open CurryOn.Common
 open CurryOn.Elastic
 open FSharp.Control

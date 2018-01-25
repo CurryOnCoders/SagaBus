@@ -1,4 +1,4 @@
-﻿namespace Akka.Persistence.Elasticsearch
+﻿namespace CurryOn.Akka
 
 open MBrace.FsPickler.Json
 open System

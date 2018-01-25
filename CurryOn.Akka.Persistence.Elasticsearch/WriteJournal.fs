@@ -1,15 +1,20 @@
 ﻿namespace Akka.Persistence.Elasticsearch
 
+open Akka
 open Akka.Actor
 open Akka.Configuration
+open Akka.Event
+open Akka.FSharp
 open Akka.Persistence
 open Akka.Persistence.Journal
 open Akka.Streams
 open Akka.Streams.Dsl
+open CurryOn.Akka
 open CurryOn.Common
 open CurryOn.Elastic
 open FSharp.Control
 open System
+open System.Collections.Concurrent
 open System.Collections.Immutable
 open System.Threading
 open System.Threading.Tasks
@@ -24,15 +29,36 @@ module internal EventJournal =
         let deserializer = serialization.GetType().GetMethod("Deserialize").MakeGenericMethod(eventType)
         deserializer.Invoke(serialization, [|event|])
 
-type ElasticsearchJournal (config: Config) = 
+type ElasticsearchJournal (config: Config) as journal = 
     inherit AsyncWriteJournal()
     static let semaphore = new SemaphoreSlim(1, 1)
     static let journalId = Guid.NewGuid()
     let context = AsyncWriteJournal.Context
     let plugin = ElasticsearchPlugin(context)
-    let writeBatchSize = lazy(config.GetInt("write-batch-size"))
-    let readBatchSize = lazy(config.GetInt("read-batch-size"))
+    let writeBatchSize = lazy(config.GetInt("write-batch-size"), 512)
+    let readBatchSize = lazy(config.GetInt("read-batch-size"), 1024)
+    let persistenceIdSubscribers = new ConcurrentDictionary<string, Set<IActorRef>>()
+    let tagSubscribers = new ConcurrentDictionary<string, Set<IActorRef>>()
+    let mutable allPersistenceIdSubscribers = Set.empty<IActorRef>
+    let mutable allPersistenceIds = Set.empty<string>
+    let allPersistenceIdsLock = new ReaderWriterLockSlim()    
+    let tagSequenceNr = ImmutableDictionary<string, int64>.Empty;
     let client = plugin.Connect () 
+    let log = context.GetLogger()
+    let handled _ = true
+    let unhandled message = journal.UnhandledMessage message |> fun _ -> false
+
+    let maybeNewPersistenceId persistenceId =
+        let isNew = 
+            if allPersistenceIds.Contains persistenceId
+            then false
+            else allPersistenceIds <- allPersistenceIds.Add persistenceId
+                 true
+        if isNew 
+        then allPersistenceIdSubscribers |> Set.iter (fun subscriber -> subscriber <! PersistenceIdAdded(persistenceId))
+
+    let getEventsByTag = PersistenceQuery.getCurrentEventsByTag client
+    let getPersistenceIds () = PersistenceQuery.getCurrentPersistenceIds client
 
     let maximumEventId =
         operation {
@@ -55,6 +81,14 @@ type ElasticsearchJournal (config: Config) =
             finally 
                 semaphore.Release() |> ignore
         }
+
+    do match getPersistenceIds () |> Operation.wait with
+       | Success success -> success.Result |> Seq.iter (fun persistenceId -> allPersistenceIds <- allPersistenceIds.Add persistenceId)
+       | Failure errors -> raise <| OperationFailedException(errors)
+
+    static member Identifier = "akka.persistence.journal.elasticsearch"
+
+    member this.UnhandledMessage message = base.Unhandled message
 
     override this.WriteMessagesAsync messages =
         task {
@@ -85,9 +119,11 @@ type ElasticsearchJournal (config: Config) =
                             return! Result.success List<DocumentId>.Empty
                         | [event] ->
                             let! result = client.Index({ Id = Some <| IntegerId event.EventId; Document = event})
+                            maybeNewPersistenceId event.PersistenceId
                             return! Result.success [result.Id]
                         | events -> 
                             let! result = client.BulkIndex(events)
+                            events |> Seq.iter (fun event -> maybeNewPersistenceId event.PersistenceId)
                             return! result.Results |> List.map (fun r -> r.Id) |> Result.success
                     })          
                 |> Operation.Parallel
@@ -141,4 +177,38 @@ type ElasticsearchJournal (config: Config) =
             for hit in result.Results.Hits do
                 hit.Document |> recoveryCallback.Invoke
         } :> Task
+
+    override __.ReceivePluginInternal (message) =
+        match message with
+        | :? ReplayCommands as command ->
+            match command with
+            | ReplayTaggedMessages (fromOffset, toOffset, tag, actor) ->
+                operation {
+                    let lowOffset = if fromOffset = 0L then None else Some fromOffset
+                    let highOffset = if toOffset = Int64.MaxValue then None else Some toOffset
+                    let! taggedEvents = getEventsByTag tag lowOffset highOffset
+                    taggedEvents.Results.Hits |> Seq.iter (fun hit -> actor <! ReplayedTaggedMessage(hit.Id.ToInt(), tag, hit.Document))
+                    return! Result.success()
+                } |> Operation.waitTask 
+                  |> (fun task -> task.PipeTo(actor), ActorRefs.NoSender, fun h -> RecoverySuccess(h), fun e -> ReplayMessagesFailure(e))
+                  |> handled
+        | :? SubscriberCommands as command ->
+            match command with
+            | SubscribeToAllPersistenceIds ->
+                allPersistenceIdSubscribers <- allPersistenceIdSubscribers.Add context.Sender
+                context.Sender <! CurrentPersistenceIds(allPersistenceIds |> Set.toList)
+                context.Watch(context.Sender) |> handled
+            | SubscribeToPersistenceId persistenceId ->
+                persistenceIdSubscribers.AddOrUpdate(persistenceId, Set.singleton context.Sender, fun _ set -> set.Add context.Sender) |> ignore
+                context.Watch(context.Sender) |> handled
+            | SubscribeToTag tag -> 
+                tagSubscribers.AddOrUpdate(tag, Set.singleton context.Sender, fun _ set -> set.Add context.Sender) |> ignore
+                context.Watch(context.Sender) |> handled
+        | :? Terminated as terminated -> 
+            persistenceIdSubscribers.Keys |> Seq.iter (fun key -> persistenceIdSubscribers.TryUpdate(key, persistenceIdSubscribers.[key] |> Set.remove terminated.ActorRef, persistenceIdSubscribers.[key]) |> ignore)
+            tagSubscribers.Keys |> Seq.iter (fun key -> tagSubscribers.TryUpdate(key, tagSubscribers.[key] |> Set.remove terminated.ActorRef, tagSubscribers.[key]) |> ignore)
+            allPersistenceIdSubscribers <- allPersistenceIdSubscribers |> Set.remove terminated.ActorRef
+            handled ()
+        | _ -> unhandled message
+
     

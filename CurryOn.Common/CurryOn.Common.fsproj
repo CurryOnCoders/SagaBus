@@ -65,6 +65,7 @@
     <Compile Include="Types.fs" />
     <Compile Include="Linq.fs" />
     <Compile Include="Collections.fs" />
+    <Compile Include="ImmutableQueue.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
     <None Include="CurryOn.Common.nuspec" />

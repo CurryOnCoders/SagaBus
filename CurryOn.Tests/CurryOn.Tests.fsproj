@@ -93,6 +93,9 @@
     <Reference Include="Akka.TestKit">
       <HintPath>..\packages\Akka.TestKit.1.2.3\lib\net45\Akka.TestKit.dll</HintPath>
     </Reference>
+    <Reference Include="Dandh.Monitoring.Domain">
+      <HintPath>..\..\..\Domain\Monitoring\Dandh.Monitoring\Dandh.Monitoring.Domain\bin\Debug\Dandh.Monitoring.Domain.dll</HintPath>
+    </Reference>
     <Reference Include="Elasticsearch.Net">
       <HintPath>..\packages\Elasticsearch.Net.5.6.0\lib\net46\Elasticsearch.Net.dll</HintPath>
     </Reference>

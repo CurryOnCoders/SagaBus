@@ -4,6 +4,7 @@ open Akka.Actor
 open Akka.Persistence
 open Akka.Serialization
 open Akka.Streams
+open CurryOn.Akka
 open CurryOn.Elastic
 open FSharp.Control
 open System

@@ -5,6 +5,7 @@ open Akka.FSharp
 open Akka.Persistence.Elasticsearch
 open Akka.Persistence.Query
 open Akka.Streams.Dsl
+open CurryOn.Akka
 open CurryOn.Elastic
 open FSharp.Control
 open Microsoft.VisualStudio.TestTools.UnitTesting
@@ -127,7 +128,8 @@ type ElasticsearchPersistenceTests () =
         let readJournal = PersistenceQuery.Get(akka).ReadJournalFor<ElasticsearchReadJournal>(ElasticsearchReadJournal.Identifier)
         let employees = new System.Collections.Generic.List<string>()        
         
-        readJournal.CurrentPersistenceIds().RunForeach((fun id -> employees.Add(id)), materializer) |> Task.ofUnit |> Task.runSynchronously
+        let task = readJournal.CurrentPersistenceIds().RunForeach((fun id -> employees.Add(id)), materializer) |> Task.ofUnit |> Task.runSynchronously
+
         Assert.IsTrue(employees.Count > 0)
 
         for persistenceId in employees do

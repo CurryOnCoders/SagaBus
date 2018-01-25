@@ -1,4 +1,4 @@
-﻿namespace Akka.Persistence.Elasticsearch
+﻿namespace CurryOn.Akka
 
 open Akka.Actor
 open Akka.Persistence
@@ -13,33 +13,6 @@ module internal Formats =
 
 type SerializedEvent = string
 type SerializedSnapshot = string
-
-//[<CLIMutable>]
-//[<Indexed("persisted_event")>]
-//type PersistingEvent =
-//    {
-//        [<ExactMatch("persistence_id")>]  PersistenceId: string
-//        [<ExactMatch("event_type")>]      EventType: string
-//        [<NonIndexedObject("sender")>]    Sender: IActorRef
-//        [<Int64("sequence_number")>]      SequenceNumber: int64
-//        [<ExactMatch("writer_id")>]       WriterId: string
-//        [<FullText("event")>]             Event: SerializedEvent
-//        [<ExactMatch("tags")>]            Tags: string []
-//    }
-//    interface IPersistentRepresentation with
-//        member __.IsDeleted = false
-//        member this.Manifest = this.EventType
-//        member this.PersistenceId = this.PersistenceId
-//        member this.Sender = this.Sender
-//        member this.SequenceNr = this.SequenceNumber
-//        member this.WriterGuid = this.WriterId
-//        member this.Payload = this.Event |> Serialization.parseJson<obj>
-//        member this.WithPayload payload = 
-//            {this with Event = payload |> Serialization.toJson} :> IPersistentRepresentation
-//        member this.WithManifest manifest = 
-//            {this with EventType = manifest} :> IPersistentRepresentation
-//        member this.Update (sequenceNr, persistenceId, _, sender, writerGuid) = 
-//            {this with SequenceNumber = sequenceNr; PersistenceId = persistenceId; Sender = sender; WriterId = writerGuid} :> IPersistentRepresentation
 
 [<CLIMutable>]
 [<Indexed("event_journal_metadata")>]
@@ -122,3 +95,26 @@ type TaggedEvent =
 type EventsByTagMessages =
     | RegisterTagSubscriber of RegisterTagSubscriber
     | NewTaggedEvent of TaggedEvent
+
+
+[<AutoOpen>]
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module internal Messages =
+    type SubscriberCommands =
+        | SubscribeToAllPersistenceIds
+        | SubscribeToPersistenceId of string        
+        | SubscribeToTag of string
+
+    type PersistenceIdSubscriptionCommands =
+        | CurrentPersistenceIds of string list
+        | PersistenceIdAdded of string
+
+    type EventSubscriptionCommands =
+        | Continue
+        | EventAppended
+
+    type ReplayCommands =
+        | ReplayTaggedMessages of int64*int64*string*IActorRef
+
+    type ReplayEvents =
+        | ReplayedTaggedMessage of int64*string*IPersistentRepresentation 

@@ -2,7 +2,7 @@
 #r @"..\packages\NEST.5.6.0\lib\net46\Nest.dll"
 #r @"..\CurryOn.Akka.Persistence.Elasticsearch\bin\Debug\CurryOn.Akka.Persistence.Elasticsearch.dll"
 
-open Akka.Persistence.Elasticsearch
+open CurryOn.Akka
 open Nest
 
 let settings = 

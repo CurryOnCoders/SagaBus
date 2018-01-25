@@ -51,12 +51,14 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Common.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="Model.fs" />
     <Compile Include="Plugin.fs" />
-    <Compile Include="Journal.fs" />
-    <Compile Include="SnapshotStore.fs" />
     <Compile Include="Query.fs" />
+    <Compile Include="WriteJournal.fs" />
+    <Compile Include="SnapshotStore.fs" />
+    <Compile Include="ReadJournal.fs" />
     <None Include="ReadMe.md" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />

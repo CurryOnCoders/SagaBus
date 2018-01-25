@@ -35,8 +35,7 @@ module Task =
     let fromUnit (t: Task<unit>) =
         t :> Task
 
-    let runSynchronously<'a> (task : Task<'a>) =
-        task.Result
+    let inline runSynchronously<'a> (task: Task<'a>) = task |> Async.AwaitTask |> Async.RunSynchronously
 
     let toResult<'a> (t: Task<'a>) =
         try t.Result |> Result.success
