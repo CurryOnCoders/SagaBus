@@ -33,6 +33,7 @@ type ElasticsearchJournal (config: Config) as journal =
     inherit AsyncWriteJournal()
     static let semaphore = new SemaphoreSlim(1, 1)
     static let journalId = Guid.NewGuid()
+    static let maximumEventId = ref 0L
     let context = AsyncWriteJournal.Context
     let plugin = ElasticsearchPlugin(context)
     let writeBatchSize = lazy(config.GetInt("write-batch-size"), 512)
@@ -65,16 +66,20 @@ type ElasticsearchJournal (config: Config) as journal =
     let getEventsByTag = PersistenceQuery.getCurrentEventsByTag client
     let getPersistenceIds () = PersistenceQuery.getCurrentPersistenceIds client
 
-    let maximumEventId =
+    do 
         operation {
-            let! eventMetadata = 
-                Dsl.matchAll<EventJournalMetadata> None
-                |> Dsl.first<EventJournalMetadata> client None (Sort.descending <@ fun metadata -> metadata.CommitDate @>)                    
-            return! Result.success <|
-                match eventMetadata with
-                | Some metadata -> metadata.MaximumEventId
-                | None -> 0L
-        } |> Operation.returnOrFail |> ref
+            do! semaphore.WaitAsync()
+            try if !maximumEventId = 0L
+                then let! eventMetadata = 
+                        Dsl.matchAll<EventJournalMetadata> None
+                        |> Dsl.first<EventJournalMetadata> client None (Sort.descending <@ fun metadata -> metadata.CommitDate @>)                    
+                     return! Result.success <|
+                        match eventMetadata with
+                        | Some metadata -> maximumEventId := metadata.MaximumEventId
+                        | None -> maximumEventId := 0L
+                else return! Result.success()
+            finally semaphore.Release() |> ignore
+        } |> Operation.returnOrFail
 
     let getEventIds numberOfIds =
         operation {          
@@ -132,7 +137,7 @@ type ElasticsearchJournal (config: Config) as journal =
                               SequenceNumber = persistentMessage.SequenceNr
                               Event = persistentMessage.Payload |> Serialization.toJson
                               WriterId = persistentMessage.WriterGuid
-                              Tags = tags}) |> Seq.toList
+                              Tags = tags }) |> Seq.toList
 
                         let! eventIds = getEventIds events.Length
 
@@ -204,10 +209,13 @@ type ElasticsearchJournal (config: Config) as journal =
             let! result =
                 Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> (Inclusive first) (Inclusive last)
                 |> Query.And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
-                |> Query.execute<PersistedEvent> client None None None (max |> int |> Some)
+                |> Query.execute<PersistedEvent> client None (Some <| Sort.ascending <@ fun event -> event.SequenceNumber @>) None (max |> int |> Some)
                 |> SearchOperation.toTask
-            for hit in result.Results.Hits do
-                hit.Document |> recoveryCallback.Invoke
+            return 
+                result.Results.Hits 
+                |> Seq.map (fun hit -> hit.Document)
+                |> Seq.map (fun doc -> new Persistent(doc.Event, doc.SequenceNumber, doc.PersistenceId, doc.EventType, false, doc.Sender))
+                |> Seq.iter (fun persistent -> persistent |> recoveryCallback.Invoke)
         } :> Task
 
     override __.ReceivePluginInternal (message) =

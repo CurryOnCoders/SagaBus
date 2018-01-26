@@ -17,6 +17,8 @@ module internal Common =
 
     let isNotNull<'a when 'a: null> = isNull<'a> >> not
 
+    let isNullOrEmpty = String.IsNullOrEmpty
+
     let getCaseName (x: 'a) = 
         match FSharpValue.GetUnionFields(x, typeof<'a>) with
         | case, _ -> case.Name  

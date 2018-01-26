@@ -50,11 +50,13 @@ type DocumentId =
         | IntegerId i -> i |> Nest.Id.op_Implicit
         | StringId s -> s |> Nest.Id.op_Implicit
     static member internal Parse (str: string) =
-        match Guid.TryParse(str) with
-        | (true, guid) -> UniqueId guid
-        | _ -> match Int64.TryParse(str) with
-               | (true, i) -> IntegerId i
-               | _ -> StringId str
+        if str |> isNullOrEmpty
+        then UniqueId <| Guid.NewGuid()
+        else match Guid.TryParse(str) with
+             | (true, guid) -> UniqueId guid
+             | _ -> match Int64.TryParse(str) with
+                    | (true, i) -> IntegerId i
+                    | _ -> StringId str
     static member internal From any =
         match any |> box with
         | :? Guid as guid -> UniqueId guid

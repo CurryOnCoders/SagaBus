@@ -48,10 +48,21 @@ module internal Elastic =
         }
 
     let inline private toError (response: IResponse) =
-        { Status = response.ServerError.Status
-          OriginalException = if response.OriginalException |> isNotNull then Some response.OriginalException else None
-          Error = response.ServerError.Error |> toServerError
-        }
+        if response |> isNotNull
+        then { Status = response.ServerError.Status
+               OriginalException = if response.OriginalException |> isNotNull then Some response.OriginalException else None
+               Error = if response.ServerError |> isNotNull 
+                       then response.ServerError.Error |> toServerError 
+                       else { Type = "Bad Request"; Resource = None; Reason = "HTTP 400: Bad Request"; Cause = None}
+             }      
+        else { Status = 500
+               OriginalException = None
+               Error = { Type = "Null Reference"
+                         Resource = None
+                         Reason = "Error: Response was null"
+                         Cause = None
+                       }
+             }
 
     let inline private toFlags (flags: Flags seq) =
         let inline getFlag (flag: Flags) =
@@ -134,7 +145,7 @@ module internal Elastic =
                 match indexRequest.Id with
                 | Some id -> client.IndexAsync<'index>(indexRequest.Document, (fun i -> i.Id(id.ToId()) :> IIndexRequest))
                 | None -> client.IndexAsync<'index>(indexRequest.Document)
-            return! if response.IsValid && response.Created
+            return! if response |> isNotNull && response.IsValid && (response.Created || response.Result = Result.Updated)
                     then let indexResponse =
                             { Index = response.Index
                               Type = response.Type
