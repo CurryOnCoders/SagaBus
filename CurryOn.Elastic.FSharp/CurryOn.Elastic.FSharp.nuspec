@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Elastic.FSharp</id>
-    <version>0.1.9</version>
+    <version>0.1.2</version>
     <title>CurryOn.Elastic.FSharp</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
