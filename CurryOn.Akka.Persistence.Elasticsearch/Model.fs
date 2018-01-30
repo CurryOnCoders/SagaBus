@@ -15,18 +15,9 @@ type SerializedEvent = string
 type SerializedSnapshot = string
 
 [<CLIMutable>]
-[<Indexed("event_journal_metadata")>]
-type EventJournalMetadata =
-    {
-        [<Int64("id")>]                       MaximumEventId: int64
-        [<Date("commit_date", Formats.Date)>] CommitDate: DateTime
-    }
-
-[<CLIMutable>]
-[<Indexed("persisted_event", IdProperty = "EventId")>]
+[<Indexed("persisted_event")>]
 type PersistedEvent =
     {
-        [<Int64("id")>]                   EventId: int64
         [<ExactMatch("persistence_id")>]  PersistenceId: string
         [<ExactMatch("event_type")>]      EventType: string
         [<NonIndexedObject("sender")>]    Sender: IActorRef

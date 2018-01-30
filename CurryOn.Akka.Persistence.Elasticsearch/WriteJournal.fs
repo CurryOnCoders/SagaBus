@@ -31,9 +31,6 @@ module internal EventJournal =
 
 type ElasticsearchJournal (config: Config) as journal = 
     inherit AsyncWriteJournal()
-    static let semaphore = new SemaphoreSlim(1, 1)
-    static let journalId = Guid.NewGuid()
-    static let maximumEventId = ref 0L
     let context = AsyncWriteJournal.Context
     let plugin = ElasticsearchPlugin(context)
     let writeBatchSize = lazy(config.GetInt("write-batch-size"), 512)
@@ -65,32 +62,6 @@ type ElasticsearchJournal (config: Config) as journal =
 
     let getEventsByTag = PersistenceQuery.getCurrentEventsByTag client
     let getPersistenceIds () = PersistenceQuery.getCurrentPersistenceIds client
-
-    do 
-        operation {
-            do! semaphore.WaitAsync()
-            try if !maximumEventId = 0L
-                then let! eventMetadata = 
-                        Dsl.matchAll<EventJournalMetadata> None
-                        |> Dsl.first<EventJournalMetadata> client None (Sort.descending <@ fun metadata -> metadata.CommitDate @>)                    
-                     return! Result.success <|
-                        match eventMetadata with
-                        | Some metadata -> maximumEventId := metadata.MaximumEventId
-                        | None -> maximumEventId := 0L
-                else return! Result.success()
-            finally semaphore.Release() |> ignore
-        } |> Operation.returnOrFail
-
-    let getEventIds numberOfIds =
-        operation {          
-            do! semaphore.WaitAsync()
-            try 
-                let eventIds = [for _ in {1..numberOfIds} do yield Interlocked.Increment(maximumEventId)]
-                let! metaResult = client.Index({ Id = None; Document = {MaximumEventId = !maximumEventId; CommitDate = DateTime.UtcNow}})
-                return! Result.success eventIds
-            finally 
-                semaphore.Release() |> ignore
-        }
 
     let notifyPersistenceIdChange persistenceId =
         match persistenceIdSubscribers.TryGetValue(persistenceId) with
@@ -130,8 +101,7 @@ type ElasticsearchJournal (config: Config) as journal =
                                     eventTags |> Seq.iter (newTags.Add >> ignore)
                                     eventTags
                                 | _ -> [||] 
-                            { EventId = 0L;
-                              PersistenceId = persistentMessage.PersistenceId 
+                            { PersistenceId = persistentMessage.PersistenceId 
                               EventType = persistentMessage.Payload |> getFullTypeName
                               Sender = persistentMessage.Sender
                               SequenceNumber = persistentMessage.SequenceNr
@@ -139,13 +109,11 @@ type ElasticsearchJournal (config: Config) as journal =
                               WriterId = persistentMessage.WriterGuid
                               Tags = tags }) |> Seq.toList
 
-                        let! eventIds = getEventIds events.Length
-
-                        match events |> List.mapi (fun index event -> {event with EventId = eventIds.[index]}) with
+                        match events with
                         | [] -> 
                             return! Result.success List<DocumentId>.Empty
                         | [event] ->
-                            let! result = client.Index({ Id = Some <| IntegerId event.EventId; Document = event})
+                            let! result = client.Index({ Id = None; Document = event})
                             if maybeNewPersistenceId event.PersistenceId
                             then newPersistenceIds.Add(event.PersistenceId) |> ignore
                             return! Result.success [result.Id]
@@ -177,15 +145,15 @@ type ElasticsearchJournal (config: Config) as journal =
             then newTags |> Seq.iter notifyTagChange
 
             return match errors with
-                   | [] -> null
-                   | _ -> ImmutableList.CreateRange(errors) :> IImmutableList<exn>
-        }
+                    | [] -> null
+                    | _ -> ImmutableList.CreateRange(errors) :> IImmutableList<exn>
+        } 
 
     override this.DeleteMessagesToAsync (persistenceId, sequenceNumber) =
         task {
             return! Query.range <@ fun (event: PersistedEvent) -> event.SequenceNumber @> Unbounded (Inclusive sequenceNumber)
                     |> Query.And (Query.field <@ fun (event: PersistedEvent) -> event.PersistenceId @> persistenceId)
-                    |> Query.delete client None None None None
+                    |> Query.delete<PersistedEvent> client None None None None
                     |> SearchOperation.toTask
         } :> Task
 

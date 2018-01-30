@@ -21,7 +21,7 @@
       <dependency id="Akka.Serialization.Hyperion" version="1.2.3.43-beta" />
       <dependency id="Akka.Streams" version="1.2.3" />
       <dependency id="CurryOn.Common" version="0.1.1" />
-      <dependency id="CurryOn.Elastic.FSharp" version="0.1.1" />      
+      <dependency id="CurryOn.Elastic.FSharp" version="0.1.2" />      
       <dependency id="FsPickler" version="3.2.0" />
       <dependency id="FsPickler.Json" version="3.2.0" />
       <dependency id="Newtonsoft.Json" version="9.0.1" />

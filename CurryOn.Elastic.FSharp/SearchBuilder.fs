@@ -13,7 +13,11 @@ module FieldExpr =
         | PropertyGet (_,property,_) ->
             match property.GetCustomAttributes(typeof<ElasticsearchPropertyAttributeBase>, true) with
             | [||] -> property.Name
-            | attributes -> attributes |> Seq.head |> unbox<ElasticsearchPropertyAttributeBase> |> fun a -> a.Name
+            | attributes -> 
+                match attributes |> Seq.head with 
+                | :? ExactMatchAttribute as exact -> sprintf "%s.keyword" exact.Name
+                | :? ElasticsearchPropertyAttributeBase as attribute -> attribute.Name
+                | _ -> failwithf "Property '%s' must have an ElasticsearchProperty attribute" property.Name
         | _ -> failwith "getField must be PropertyGet expression"
 
     let inline fieldContains getField value =

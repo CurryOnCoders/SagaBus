@@ -62,11 +62,11 @@ type ElasticsearchSnapshotStore (config: Config) =
             let! result = 
                 if metadata.Timestamp > DateTime.MinValue
                 then SnapshotSelectionCriteria(metadata.SequenceNr, metadata.Timestamp) |> getSnapshotQuery metadata.PersistenceId 
-                     |> Query.delete client None None None None
+                     |> Query.delete<Snapshot> client None None None None
                      |> Operation.waitTask
                 else Query.field<Snapshot,string> <@ fun snapshot -> snapshot.PersistenceId @> metadata.PersistenceId
                      |> Query.And (Query.field<Snapshot,int64> <@ fun snapshot -> snapshot.SequenceNumber @> metadata.SequenceNr)
-                     |> Query.delete client None None None None
+                     |> Query.delete<Snapshot> client None None None None
                      |> Operation.waitTask
 
             return! result |> SearchResult.toTask
@@ -76,6 +76,6 @@ type ElasticsearchSnapshotStore (config: Config) =
         task {
             return!
                 getSnapshotQuery persistenceId criteria
-                |> Query.delete client None None None None
+                |> Query.delete<Snapshot> client None None None None
                 |> SearchOperation.toTask
         } :> Task

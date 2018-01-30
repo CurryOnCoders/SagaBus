@@ -41,7 +41,7 @@ module internal PersistenceQuery =
             let fromOffset = lowOffset |> toLowerBound
             let toOffset = highOffset |> toUpperBound
             return! [Dsl.terms<PersistedEvent,string> <@ fun persistedEvent -> persistedEvent.Tags @> [tag]]
-                    |> Dsl.bool [] [Dsl.range<PersistedEvent,int64> <@ fun persistedEvent -> persistedEvent.EventId @> fromOffset toOffset None] []
+                    |> Dsl.bool [] [Dsl.range<PersistedEvent,int64> <@ fun persistedEvent -> persistedEvent.SequenceNumber @> fromOffset toOffset None] []
                     |> Dsl.execute<PersistedEvent> client None (Some <| Sort.ascending <@ fun persistedEvent -> persistedEvent.SequenceNumber @>) None None
         }
 

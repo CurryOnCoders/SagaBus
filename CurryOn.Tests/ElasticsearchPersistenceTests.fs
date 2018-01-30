@@ -18,8 +18,7 @@ type ElasticsearchPersistenceTests () =
     static let sleep seconds = (seconds * 1000) |> System.Threading.Thread.Sleep
     static let mappings =
         [{Type = typeof<PersistedEvent>; IndexName = "event_journal"; TypeName = "persisted_event"};
-         {Type = typeof<Snapshot>; IndexName = "snapshot_store"; TypeName = "snapshot"};
-         {Type = typeof<EventJournalMetadata>; IndexName = "metadata_store"; TypeName = "event_journal_metadata"}]
+         {Type = typeof<Snapshot>; IndexName = "snapshot_store"; TypeName = "snapshot"};]
     static let names =
         use reader = new IO.StreamReader(@"C:\Temp\names.txt")
         seq { 

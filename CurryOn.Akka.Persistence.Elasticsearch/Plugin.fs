@@ -12,8 +12,7 @@ open System
 module internal Settings =
     let mappings =
         [{Type = typeof<PersistedEvent>; IndexName = "event_journal"; TypeName = "persisted_event"};
-         {Type = typeof<Snapshot>; IndexName = "snapshot_store"; TypeName = "snapshot"};
-         {Type = typeof<EventJournalMetadata>; IndexName = "metadata_store"; TypeName = "event_journal_metadata"}]
+         {Type = typeof<Snapshot>; IndexName = "snapshot_store"; TypeName = "snapshot"};]
 
     let load (config: Akka.Configuration.Config) =
         { Node = config.GetString("uri", "http://localhost:9200") |> Uri
@@ -42,8 +41,7 @@ module internal Settings =
 type ElasticsearchSerialization (serialization: Serialization) =
     new (actorSystem: ActorSystem) = ElasticsearchSerialization(actorSystem.Serialization)
     member __.Serialize (persistenceId, sender, sequenceNr, manifest, writerGuid, payload) =
-        { EventId = 0L;
-          PersistenceId = persistenceId
+        { PersistenceId = persistenceId
           SequenceNumber = sequenceNr
           EventType = manifest
           Sender = sender

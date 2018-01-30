@@ -49,7 +49,9 @@ module internal Elastic =
 
     let inline private toError (response: IResponse) =
         if response |> isNotNull
-        then { Status = response.ServerError.Status
+        then { Status = if response.ServerError |> isNotNull
+                        then response.ServerError.Status
+                        else 500
                OriginalException = if response.OriginalException |> isNotNull then Some response.OriginalException else None
                Error = if response.ServerError |> isNotNull 
                        then response.ServerError.Error |> toServerError 
@@ -611,18 +613,22 @@ module internal Elastic =
             let musts =
                 match boolQuery.Must with
                 | [] -> b
-                | m -> b.Must(m |> Seq.map (fun q -> applyQueryClauseToDescriptor q search) |> Seq.toArray)
+                | m -> let queries = m |> Seq.map (fun q -> (fun (qcd: QueryContainerDescriptor<'index>) -> applyQueryClauseToDescriptor q qcd)) |> Seq.map (fun f -> new Func<_,_>(f))
+                       b.Must(queries)
             let shoulds =
                 match boolQuery.Should with
                 | [] -> musts
-                | s -> musts.Should(s |> Seq.map (fun q -> applyQueryClauseToDescriptor q search) |> Seq.toArray)
+                | s -> let queries = s |> Seq.map (fun q ->  (fun (qcd: QueryContainerDescriptor<'index>) -> applyQueryClauseToDescriptor q qcd)) |> Seq.map (fun f -> new Func<_,_>(f))
+                       musts.Should(queries)
             let mustNots =
                 match boolQuery.MustNot with
                 | [] -> shoulds
-                | n -> shoulds.MustNot(n |> Seq.map (fun q -> applyQueryClauseToDescriptor q search) |> Seq.toArray)
+                | n -> let queries = n |> Seq.map (fun q -> (fun (qcd: QueryContainerDescriptor<'index>) -> applyQueryClauseToDescriptor q qcd)) |> Seq.map (fun f -> new Func<_,_>(f))
+                       shoulds.MustNot(queries)
             match boolQuery.Filter with
             | [] -> mustNots
-            | f -> mustNots.Filter(f |> Seq.map (fun q -> applyQueryClauseToDescriptor q search) |> Seq.toArray)
+            | f -> let queries = f |> Seq.map (fun q -> (fun (qcd: QueryContainerDescriptor<'index>) -> applyQueryClauseToDescriptor q qcd)) |> Seq.map (fun f -> new Func<_,_>(f))
+                   mustNots.Filter(queries)
             :> IBoolQuery)
         | DisMax disMax -> search.DisMax(fun d -> d.Boost(disMax.Boost |> toNullable).TieBreaker(disMax.TieBreaker |> toNullable).Queries(disMax.Queries |> Seq.map (fun q -> applyQueryClauseToDescriptor q search) |> Seq.toArray) :> IDisMaxQuery)
         | FunctionScore functionScore -> search.FunctionScore(fun f -> f.Query(fun q -> applyQueryClauseToDescriptor functionScore.Query q).MinScore(functionScore.MinScore |> toNullable).MaxBoost(functionScore.MaxBoost |> toNullable).ScoreMode(functionScore.ScoreMode.ToFunctionScoreMode() |> Nullable).BoostMode(functionScore.BoostMode.ToApi() |> Nullable) :> IFunctionScoreQuery)
@@ -822,7 +828,9 @@ module internal Elastic =
 
     let deleteByQuery<'index when 'index: not struct> (client: ElasticClient) (search: CurryOn.Elastic.SearchRequest) =
         operation {
-            let! response = client.DeleteByQueryAsync(fun d -> d |> applySearchToDeleteByQueryDescriptor search)
+            let! response = client.DeleteByQueryAsync<'index>(fun d -> 
+                let descriptor = d |> applySearchToDeleteByQueryDescriptor<'index> search
+                descriptor)
             return! if response.IsValid
                     then let deleteResponse = 
                             { ElapsedTime = response.Took |> float |> TimeSpan.FromMilliseconds
@@ -831,7 +839,7 @@ module internal Elastic =
                               Deleted = response.Deleted
                               Failed = response.Failures.Count |> int64
                             }
-                         Result.successWithEvents deleteResponse [SearchExecutedSuccessfully]
+                         Result.successWithEvents deleteResponse [QueryResultsDeleted]
                     else Result.failure [response |> toError |> DeleteByQueryFailed]
         }
 
