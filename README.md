@@ -19,7 +19,7 @@ A pure-F# Depdendency Injection framework, providing an IoC Container and a Type
 An extension of the FSharp.Control namespace providing a framework for enabling the use of [Railway-Oriented Programming](https://fsharpforfunandprofit.com/rop/) patterns in F#.  Encapsulates functionality from the [Task Parallel Library (TPL)](https://docs.microsoft.com/en-us/dotnet/standard/parallel-programming/task-parallel-library-tpl), [Async Workflows](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/asynchronous-workflows), and [Lazy Computations](https://docs.microsoft.com/en-us/dotnet/fsharp/language-reference/lazy-computations) as **Operations**, and provides a Computation Expression Builder and a library of functions and operators for working with Operations and their Results.  
 
 ### CurryOn.Elastic.FSharp
-An F#-idiomatch Library for [Elasticsearch](http://elastic.co), including a representation of the Elasticsearch Query Model as Discriminated Unions, and F# modules for indexing documents as well as creating and maintaining indexes.
+An F#-idiomatic Library for [Elasticsearch](http://elastic.co), including a representation of the Elasticsearch Query Model as Discriminated Unions, and F# modules for indexing documents as well as creating and maintaining indexes.
 
 
 ### CurryOn.SagaBus 

@@ -10,11 +10,11 @@ open FSharp.Control
 open System
 
 module internal Settings =
-    let mappings =
-        [{Type = typeof<PersistedEvent>; IndexName = "event_journal"; TypeName = "persisted_event"};
-         {Type = typeof<Snapshot>; IndexName = "snapshot_store"; TypeName = "snapshot"};]
-
     let load (config: Akka.Configuration.Config) =
+        let indexName = config.GetString("index-name", "event_journal")
+        let mappings =
+            [{Type = typeof<PersistedEvent>; IndexName = indexName; TypeName = "persisted_event"};
+             {Type = typeof<Snapshot>; IndexName = indexName; TypeName = "snapshot"};]
         { Node = config.GetString("uri", "http://localhost:9200") |> Uri
           DefaultIndex = Some "event_journal"
           DisableDirectStreaming = config.GetBoolean("disable-direct-streaming", false)
@@ -22,7 +22,7 @@ module internal Settings =
           IndexMappings = 
             let configuredMappings = config.GetConfig("index-mappings")
             if configuredMappings |> isNull
-            then []
+            then mappings
             else configuredMappings.AsEnumerable() |> Seq.map (fun keyValue -> 
                     try
                         let clrType = Type.GetType(keyValue.Value.GetString())
@@ -58,9 +58,7 @@ type IElasticsearchPlugin =
 
 type ElasticsearchPlugin (system: ActorSystem) =
     let config = system.Settings.Config.GetConfig("akka.persistence.journal.elasticsearch")
-    let settings = 
-        let elasticSettings = config |> Settings.load
-        {elasticSettings with IndexMappings = elasticSettings.IndexMappings @ Settings.mappings}
+    let settings = config |> Settings.load
     let recreateIndices = config.GetBoolean("recreate-indices")
     let connection = settings |> Elasticsearch.connect
 

@@ -18,7 +18,7 @@ type ElasticsearchPersistenceTests () =
     static let sleep seconds = (seconds * 1000) |> System.Threading.Thread.Sleep
     static let mappings =
         [{Type = typeof<PersistedEvent>; IndexName = "event_journal"; TypeName = "persisted_event"};
-         {Type = typeof<Snapshot>; IndexName = "snapshot_store"; TypeName = "snapshot"};]
+         {Type = typeof<Snapshot>; IndexName = "event_journal"; TypeName = "snapshot"};]
     static let names =
         use reader = new IO.StreamReader(@"C:\Temp\names.txt")
         seq { 
@@ -63,6 +63,7 @@ type ElasticsearchPersistenceTests () =
                     {
                         class = "Akka.Persistence.Elasticsearch.ElasticsearchJournal, CurryOn.Akka.Persistence.Elasticsearch"
                         uri = "http://localhost:9200"
+                        index-name = "event_journal"
                         write-batch-size = 4095
                         read-batch-size = 4095
                         recreate-indices = false
@@ -134,13 +135,15 @@ type ElasticsearchPersistenceTests () =
         Assert.AreEqual(46044.56M, persistedJim.Salary)
 
     [<TestMethod>]
-    member __.TestElasticsearchReadJouranal () =
+    member __.TestElasticsearchReadJournal () =
         let akka = actorSystem.Value
         let materializer = Akka.Streams.ActorMaterializer.Create(akka)
         let readJournal = PersistenceQuery.Get(akka).ReadJournalFor<ElasticsearchReadJournal>(ElasticsearchReadJournal.Identifier)
         let employees = new System.Collections.Generic.List<string>()        
         
         let task = readJournal.CurrentPersistenceIds().RunForeach((fun id -> employees.Add(id)), materializer) |> Task.ofUnit |> Task.runSynchronously
+
+        sleep 2
 
         Assert.IsTrue(employees.Count > 0)
 

@@ -8,14 +8,12 @@ open Nest
 let settings = 
     let connection = new ConnectionSettings("http://localhost:9200" |> System.Uri)
     connection.MapDefaultTypeIndices(fun mappings -> mappings.Add(typeof<PersistedEvent>, "event_journal")
-                                                             .Add(typeof<Snapshot>, "snapshot_store")
-                                                             .Add(typeof<EventJournalMetadata>, "metadata_store")
+                                                             .Add(typeof<Snapshot>, "event_journal")
                                                              |> ignore)
 let client = new ElasticClient(settings)
 
 client.DeleteByQuery<PersistedEvent>(fun q -> q.MatchAll() :> IDeleteByQueryRequest)
 client.DeleteByQuery<Snapshot>(fun q -> q.MatchAll() :> IDeleteByQueryRequest)
-client.DeleteByQuery<EventJournalMetadata>(fun q -> q.MatchAll() :> IDeleteByQueryRequest)
 
 //client.DeleteIndex(IndexName.op_Implicit "event_journal" |> Indices.op_Implicit)
-//client.DeleteByQuery<PersistedEvent>(fun q -> q.Query(fun qs -> qs.QueryString(fun s -> s.Query("persistence_id.keyword:ReleasedOrderSnapshot-CCACA") :> IQueryStringQuery)) :> IDeleteByQueryRequest)
+//client.DeleteIndex(IndexName.op_Implicit "snapshot_store" |> Indices.op_Implicit)

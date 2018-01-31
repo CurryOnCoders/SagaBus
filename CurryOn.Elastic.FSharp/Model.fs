@@ -580,7 +580,7 @@ type UpdateRequest<'index when 'index: not struct> =
     {
         Id: DocumentId
         Update: Update<'index>
-        RetryOnConflit: bool
+        RetryOnConflict: bool
         Timeout: TimeSpan option
         IncludeUpdatedDocumentInResponse: bool
         Version: int64 option

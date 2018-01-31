@@ -251,7 +251,7 @@ module internal Elastic =
     let internal update<'index when 'index: not struct> (client: ElasticClient) (request: UpdateRequest<'index>) =
         operation {
             let documentPath = DocumentPath<'index>.Id(request.Id.ToId())
-            let retryOnConflict = if request.RetryOnConflit then 5L else 0L
+            let retryOnConflict = if request.RetryOnConflict then 5L else 0L
             let getUpdate (ud: UpdateDescriptor<'index,'index>) =
                 match request.Timeout with
                 | Some timeout ->

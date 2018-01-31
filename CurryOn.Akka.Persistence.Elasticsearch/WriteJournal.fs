@@ -33,15 +33,18 @@ type ElasticsearchJournal (config: Config) as journal =
     inherit AsyncWriteJournal()
     let context = AsyncWriteJournal.Context
     let plugin = ElasticsearchPlugin(context)
-    let writeBatchSize = lazy(config.GetInt("write-batch-size"), 512)
-    let readBatchSize = lazy(config.GetInt("read-batch-size"), 1024)
+    let writeBatchSize = config.GetInt("write-batch-size", 512)
+    let readBatchSize = config.GetInt("read-batch-size", 1024)
     let persistenceIdSubscribers = new ConcurrentDictionary<string, Set<IActorRef>>()
     let tagSubscribers = new ConcurrentDictionary<string, Set<IActorRef>>()
+    let client = plugin.Connect () 
     let mutable allPersistenceIdSubscribers = Set.empty<IActorRef>
-    let mutable allPersistenceIds = Set.empty<string>
+    let mutable allPersistenceIds = 
+        let result = client |> Search.distinct<PersistedEvent,string> <@ fun event -> event.PersistenceId @> None |> Operation.returnOrFail
+        result.Results.Hits |> List.fold (fun acc hit -> acc |> Set.add hit.Document.PersistenceId) Set.empty<string> 
     let allPersistenceIdsLock = new ReaderWriterLockSlim()    
     let tagSequenceNr = ImmutableDictionary<string, int64>.Empty;
-    let client = plugin.Connect () 
+    
     let log = context.GetLogger()
     let handled _ = true
     let unhandled message = journal.UnhandledMessage message |> fun _ -> false
@@ -181,8 +184,7 @@ type ElasticsearchJournal (config: Config) as journal =
                 |> SearchOperation.toTask
             return 
                 result.Results.Hits 
-                |> Seq.map (fun hit -> hit.Document)
-                |> Seq.map (fun doc -> new Persistent(doc.Event, doc.SequenceNumber, doc.PersistenceId, doc.EventType, false, doc.Sender))
+                |> Seq.map (fun hit -> hit.Document :> IPersistentRepresentation)
                 |> Seq.iter (fun persistent -> persistent |> recoveryCallback.Invoke)
         } :> Task
 
