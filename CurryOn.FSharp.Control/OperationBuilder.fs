@@ -116,6 +116,12 @@ module OperationBuilder =
         | Success successfulResult -> cont (successfulResult.Result,successfulResult.Events)
         | Failure errors -> CompletedStep <| Failure errors
 
+    /// Binding function for operation results of different event types
+    let inline bindResultAcross (result: OperationResult<'a,'aevent>) (cont: ('a*'aevent list) -> OperationStep<'b,'bevent>) =
+        match result with
+        | Success successfulResult -> cont (successfulResult.Result,[])
+        | Failure errors -> CompletedStep <| (new OperationFailedException<'aevent>(errors) |> Result.ofException<'b, 'bevent>)
+
     /// Primary binding function for operations
     let rec bind (op: Operation<'a,'event>) (cont: ('a*'event list) -> OperationStep<'b,'event>) =
         match op with
@@ -130,6 +136,21 @@ module OperationBuilder =
             bind deferred.Value cont
         | Cancelled events -> 
             CompletedStep <| Failure events
+
+    /// Binding function for operations of different event types
+    let rec bindAcross (op: Operation<'a,'aevent>) (cont: ('a*'aevent list) -> OperationStep<'b,'bevent>) =
+        match op with
+        | Completed result -> 
+            bindResultAcross result cont
+        | InProcess inProcess ->
+            let awt = inProcess.ConfigureAwait(false).GetAwaiter()
+            if awt.IsCompleted 
+            then cont(awt.GetResult())  // Proceed to the next step based on the result we already have.                
+            else AsyncStep {Completion = awt; Continuation = (fun () -> cont(awt.GetResult()))} // AsyncStep and continue later when a result is available.
+        | Deferred deferred ->
+            bindAcross deferred.Value cont
+        | Cancelled events -> 
+            CompletedStep <| (new OperationFailedException<'aevent>(events) |> Result.ofException<'b, 'bevent>)
     
     /// Due to the way F# structural type constraints work, 
     /// these functions need to be inside a class to properly
@@ -439,8 +460,12 @@ module OperationBuilder =
         member inline __.Using(disp : #IDisposable, body : #IDisposable -> OperationStep<_,_>) = using disp body
         member inline __.Bind(task : 'a Task, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
             bindTaskNoContext task continuation        
-        member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bind op (fun (result,events) -> continuation result |> mergeEvents <| events)    
+        //member inline __.Bind(op : Operation<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
+        //    bind op (fun (result,events) -> continuation result |> mergeEvents <| events)    
+        member inline __.Bind(op : Operation<'a,'aevent>, continuation : 'a -> OperationStep<'b,'bevent>) : OperationStep<'b,'bevent> =
+            if typeof<'aevent> = typeof<'bevent>
+            then bind (op |> Operation.cast<'a,'aevent,'bevent>) (fun (result,events) -> continuation result |> mergeEvents <| (events |> Seq.cast<'bevent> |> Seq.toList))
+            else bindAcross op (fun (result,_) -> continuation result)
         member inline __.Bind(result : OperationResult<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
             bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =

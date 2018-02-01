@@ -484,3 +484,33 @@ module Operation =
             
             return! Task.WhenAll(operations |> Seq.map exec) |> Async.AwaitTask                
         }
+
+    /// Converts an Operation of one event type to an Operation of a compatible event type
+    let inline cast<'result,'aevent,'bevent> (operation: Operation<'result,'aevent>) =
+        let rec exec operation =
+            match operation with
+            | Completed result -> 
+                match result with
+                | Success success -> 
+                    match success with
+                    | Value value -> Result.success<'result,'bevent> value
+                    | WithEvents withEvents -> {Value = withEvents.Value; Events = withEvents.Events |> Seq.cast<'bevent> |> Seq.toList} |> WithEvents |> Success
+                | Failure errors -> errors |> Seq.cast<'bevent> |> Seq.toList |> Failure
+                |> Completed
+            | InProcess inProcess -> 
+                inProcess.ContinueWith(fun (task: Task<_*_>) ->
+                    let completion = new TaskCompletionSource<'result*'bevent list>()
+                    if task.IsFaulted                     
+                    then completion.SetException(task.Exception)
+                         completion.Task
+                    elif task.IsCanceled
+                    then completion.SetCanceled()
+                         completion.Task
+                    else let result,events = task.Result
+                         if events |> List.isEmpty
+                         then completion.SetResult(result, [])
+                         else completion.SetResult(result, events |> Seq.cast<'bevent> |> Seq.toList)
+                         completion.Task).Unwrap() |> InProcess
+            | Cancelled events -> Cancelled (events |> Seq.cast<'bevent> |> Seq.toList)
+            | Deferred deferred -> Deferred (EventingLazy(lazy(deferred.Value |> exec)))
+        exec operation

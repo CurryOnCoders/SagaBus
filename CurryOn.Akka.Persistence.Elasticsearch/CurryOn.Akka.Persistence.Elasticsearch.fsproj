@@ -52,12 +52,10 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Common.fs" />
-    <Compile Include="Serialization.fs" />
     <Compile Include="Model.fs" />
     <Compile Include="Plugin.fs" />
     <Compile Include="Query.fs" />
     <Compile Include="WriteJournal.fs" />
-    <Compile Include="SnapshotStore.fs" />
     <Compile Include="ReadJournal.fs" />
     <None Include="ReadMe.md" />
     <None Include="Script.fsx" />
@@ -131,6 +129,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CurryOn.Akka.Persistence.Streaming\CurryOn.Akka.Persistence.Streaming.fsproj">
+      <Name>CurryOn.Akka.Persistence.Streaming</Name>
+      <Project>{4c931853-7ada-4777-8c62-4fd06dcc27e2}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Common\CurryOn.Common.fsproj">
       <Name>CurryOn.Common</Name>
       <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>

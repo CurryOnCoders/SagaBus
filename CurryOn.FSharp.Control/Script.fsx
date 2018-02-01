@@ -330,3 +330,17 @@ let compoundUnitOp =
                 do! unitOp
         return! Result.success ()
     }
+
+type EventA = | A
+type EventB = | B
+
+let opA = 
+    operation {
+        return! Result.successWithEvents 3 [A]
+    }
+
+let opB =
+    operation {
+        let! x = opA
+        return! Result.successWithEvents (x * 2) [B]
+    }
