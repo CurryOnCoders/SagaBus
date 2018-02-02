@@ -5,7 +5,7 @@ open Akka.Persistence.Query
 open CurryOn.Akka
 
 type ElasticsearchReadJournal (system: ExtendedActorSystem) =        
-    inherit QueryReadJournalBase(system, system.Settings.Config.GetConfig("akka.persistence.query.journal.elasticsearch"), ElasticsearchReadJournal.Identifier)
+    inherit QueryReadJournalBase(system, system.Settings.Config.GetConfig(ElasticsearchReadJournal.Identifier), ElasticsearchReadJournal.Identifier)
     static member Identifier = "akka.persistence.query.journal.elasticsearch"
 
 type ElasticsearchReadJournalProvider (system: ExtendedActorSystem) =

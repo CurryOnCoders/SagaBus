@@ -26,22 +26,17 @@ type IEventJournal =
     abstract member DeleteSnapshots: string -> SnapshotSelectionCriteria -> Operation<unit, PersistenceEvent>
     abstract member DeleteAllSnapshots: string -> int64 -> Operation<unit, PersistenceEvent>
 
-module EventJournal =
-    type JournalConstructor = Config -> IActorContext -> IEventJournal
-    let private registeredJournals = ConcurrentDictionary<string, JournalConstructor>()
-    let register<'journal when 'journal :> IEventJournal> (ctor: JournalConstructor) = 
-        registeredJournals.AddOrUpdate(typeof<'journal>.FullName, ctor, new Func<string, JournalConstructor, JournalConstructor>(fun _ _ -> ctor)) |> ignore
-    let internal get<'journal when 'journal :> IEventJournal> config = 
-        match registeredJournals.TryGetValue(typeof<'journal>.FullName) with
-        | true, ctor -> ctor config
-        | _ -> failwithf "No Event Journal of Type %s Registered for use with StreamingEventJournal" typeof<'journal>.Name
+type IEventJournalProvider =
+    abstract member GetEventJournal: Config -> IActorContext -> IEventJournal
 
-type StreamingEventJournal<'journal when 'journal :> IEventJournal> (config: Config) as journal = 
+[<AbstractClass>]
+type StreamingEventJournal<'provider when 'provider :> IEventJournalProvider and 'provider: (new: unit -> 'provider)> (config: Config) as journal = 
     inherit AsyncWriteJournal()
     let context = AsyncWriteJournal.Context
     let persistenceIdSubscribers = new ConcurrentDictionary<string, Set<IActorRef>>()
     let tagSubscribers = new ConcurrentDictionary<string, Set<IActorRef>>()
-    let writeJournal = EventJournal.get<'journal> config context
+    let provider = new 'provider() :> IEventJournalProvider
+    let writeJournal = provider.GetEventJournal config context
     let mutable allPersistenceIdSubscribers = Set.empty<IActorRef>
     let mutable allPersistenceIds = writeJournal.GetCurrentPersistenceIds() |> Operation.returnOrFail
     let allPersistenceIdsLock = new ReaderWriterLockSlim()    
@@ -78,7 +73,6 @@ type StreamingEventJournal<'journal when 'journal :> IEventJournal> (config: Con
         | _ -> ()
 
     static member Identifier = "akka.persistence.journal.elasticsearch"
-
     member this.UnhandledMessage message = base.Unhandled message
 
     override this.WriteMessagesAsync messages =
@@ -115,7 +109,7 @@ type StreamingEventJournal<'journal when 'journal :> IEventJournal> (config: Con
                     })          
                 |> Operation.Parallel
         
-            let! results = indexOperations |> Async.StartAsTask
+            let results = indexOperations |> Async.RunSynchronously
             let errors = results |> Array.fold (fun acc cur ->
                 match cur with
                 | Success _ -> acc

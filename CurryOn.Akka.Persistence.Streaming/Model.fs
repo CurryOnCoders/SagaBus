@@ -57,8 +57,8 @@ type PersistenceEvent =
     | PersistenceError of exn
     member this.ToException () =
         match this with
-        | PersistedSuccessfully -> None
         | PersistenceError ex -> Some ex
+        | _ -> None
 
 
 module PersistenceOperation =

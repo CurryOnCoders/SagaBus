@@ -1,4 +1,4 @@
-﻿namespace Akka.Persistence.EventStore
+﻿namespace CurryOn.Akka
 
 open Akka.Actor
 open Akka.Serialization
@@ -6,15 +6,6 @@ open CurryOn.Akka
 open CurryOn.Common
 open EventStore.ClientAPI
 open System
-
-[<CLIMutable>]
-type EventMetadata =
-    {
-        EventType: string
-        Sender: IActorRef
-        Tags: string []
-        Size: int
-    }
 
 type IEventStoreSerializer =
     abstract member ToEvent: 'a -> EventMetadata -> EventData

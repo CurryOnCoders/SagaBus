@@ -165,6 +165,11 @@
       <Project>{afacf2db-d3a6-4e72-a408-648bd6bfc0ab}</Project>
       <Private>True</Private>
     </ProjectReference>
+    <ProjectReference Include="..\CurryOn.Akka.Persistence.Streaming\CurryOn.Akka.Persistence.Streaming.fsproj">
+      <Name>CurryOn.Akka.Persistence.Streaming</Name>
+      <Project>{4c931853-7ada-4777-8c62-4fd06dcc27e2}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Common\CurryOn.Common.fsproj">
       <Name>CurryOn.Common</Name>
       <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>

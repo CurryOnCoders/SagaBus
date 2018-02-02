@@ -52,13 +52,14 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Settings.fs" />
+    <Compile Include="Model.fs" />
     <Compile Include="Serialization.fs" />
     <Compile Include="Plugin.fs" />
-    <Compile Include="Journal.fs" />
-    <Compile Include="Query.fs" />
-    <Compile Include="SnapshotStore.fs" />
+    <Compile Include="WriteJournal.fs" />
+    <Compile Include="ReadJournal.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
+    <None Include="CurryOn.Akka.Persistence.EventStore.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Akka">

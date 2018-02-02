@@ -10,10 +10,12 @@ open FSharp.Control
 open System
 open System.Threading.Tasks
 
-type ElasticsearchSnapshotStore<'journal when 'journal :> IEventJournal> (config: Config) =
+[<AbstractClass>]
+type StreamingSnapshotStore<'provider when 'provider :> IEventJournalProvider and 'provider: (new: unit -> 'provider)> (config: Config) =
     inherit SnapshotStore()
     let context = SnapshotStore.Context
-    let writeJournal = EventJournal.get<'journal> config context 
+    let provider = new 'provider() :> IEventJournalProvider
+    let writeJournal = provider.GetEventJournal config context  
 
     override __.SaveAsync (metadata, snapshot) =
         task {

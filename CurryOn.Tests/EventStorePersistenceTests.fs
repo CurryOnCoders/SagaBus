@@ -39,6 +39,15 @@ type EventStorePersistenceTests () =
                     read-batch-size = 4095
                 }
               }
+              query {
+                journal {
+                  event-store {
+                    class = "Akka.Persistence.EventStore.EventStoreReadJournalProvider, CurryOn.Akka.Persistence.EventStore"
+                    server-name = "localhost"
+                    read-batch-size = 4095
+                  }
+                }  
+              }
             }
           }"""
 
@@ -53,9 +62,9 @@ type EventStorePersistenceTests () =
         employees <! {Name = "Rob Hobbit"; Position = "Currier"; Salary = 54862.95M}
         employees <! {Name = "Gerald Munk"; Position = "Lambda Invoker"; Salary = 48350.85M}
 
-        sleep 2
+        sleep 5
         employees <! TakeSnapshot
-        sleep 1
+        sleep 2
 
         let (allEmployees: Employee list) = employees <? GetEmployees |> Async.RunSynchronously
         Assert.AreEqual(3, allEmployees.Length)
