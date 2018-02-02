@@ -26,6 +26,16 @@ module EventJournal =
         let readBatchSize = config.GetInt("read-batch-size", 1024)
         let client = plugin.Connect () 
 
+        let toPersistedEvent (event: JournaledEvent) =
+            { PersistenceId = event.PersistenceId
+              SequenceNumber = event.SequenceNumber
+              EventType = event.Manifest
+              Sender = event.Sender
+              WriterId = event.WriterId
+              Event = event.Event |> Serialization.toJson
+              Tags = event.Tags
+            }
+
         let getSnapshotQuery persistenceId (criteria: SnapshotSelectionCriteria) =
             let inline getTimestampBound (date: Nullable<DateTime>) =
                 if date.HasValue
@@ -49,15 +59,16 @@ module EventJournal =
                     return! Result.success persistenceIds
                 }
             member __.PersistEvents events =
-                operation {
+                operation {                    
                     match events with
                     | [] -> 
                         return! Result.success ()
                     | [event] ->
-                        let! result = client.Index({ Id = None; Document = event})                            
+                        let persistedEvent = event |> toPersistedEvent                            
+                        let! result = client.Index({ Id = None; Document = persistedEvent})                            
                         return! Result.successWithEvents () [PersistedSuccessfully]
                     | events -> 
-                        let! result = client.BulkIndex(events)                            
+                        let! result = client.BulkIndex(events |> Seq.map toPersistedEvent)                            
                         return! Result.successWithEvents () [PersistedSuccessfully]
                 }
             member __.DeleteEvents persistenceId upperLimit =
