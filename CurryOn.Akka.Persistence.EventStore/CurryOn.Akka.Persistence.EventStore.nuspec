@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Akka.Persistence.EventStore</id>
-    <version>0.1.0-beta</version>
+    <version>0.1.1-beta</version>
     <title>Akka.Persistence.EventStore</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
@@ -20,7 +20,7 @@
       <dependency id="Akka.Persistence.Query" version="1.2.3.43-beta" />
       <dependency id="Akka.Serialization.Hyperion" version="1.2.3.43-beta" />
       <dependency id="Akka.Streams" version="1.2.3" />
-      <dependency id="CurryOn.Akka.Persistence.Streaming" version="0.1.0" />
+      <dependency id="CurryOn.Akka.Persistence.Streaming" version="0.1.0-beta" />
       <dependency id="CurryOn.Common" version="0.1.1" />
       <dependency id="EventStore.Client" version="4.0.3" />
       <dependency id="FsPickler" version="3.2.0" />
