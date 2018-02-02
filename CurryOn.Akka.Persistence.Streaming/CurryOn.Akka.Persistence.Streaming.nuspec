@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Akka.Persistence.Streaming</id>
-    <version>0.1.0</version>
+    <version>0.1.0-beta</version>
     <title>Akka.Persistence.Streaming</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
