@@ -27,7 +27,9 @@ type StreamingSnapshotStore<'provider when 'provider :> IEventJournalProvider an
                   Snapshot = snapshot
                 }
             
-            return! writeJournal.SaveSnapshot journalSnapshot |> PersistenceOperation.toTask
+            let result = writeJournal.SaveSnapshot journalSnapshot |> Operation.wait
+
+            return ()
         } :> Task
 
     override __.LoadAsync (persistenceId, criteria) =

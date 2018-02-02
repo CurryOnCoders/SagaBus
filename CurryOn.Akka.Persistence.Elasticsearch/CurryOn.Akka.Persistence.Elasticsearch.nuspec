@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Akka.Persistence.Elasticsearch</id>
-    <version>0.1.7-beta</version>
+    <version>0.1.8-beta</version>
     <title>Akka.Persistence.Elasticsearch</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>

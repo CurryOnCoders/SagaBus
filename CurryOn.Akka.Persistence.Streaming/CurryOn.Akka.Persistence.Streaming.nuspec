@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Akka.Persistence.Streaming</id>
-    <version>0.1.0-beta</version>
+    <version>0.1.1-beta</version>
     <title>Akka.Persistence.Streaming</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
@@ -22,6 +22,7 @@
       <dependency id="Akka.Streams" version="1.2.3" />
       <dependency id="CurryOn.Common" version="0.1.1" />
       <dependency id="CurryOn.Elastic.FSharp" version="0.1.3" />
+      <dependency id="CurryOn.FSharp.Control" version="0.1.4" />
       <dependency id="FsPickler" version="3.2.0" />
       <dependency id="FsPickler.Json" version="3.2.0" />
       <dependency id="Newtonsoft.Json" version="9.0.1" />

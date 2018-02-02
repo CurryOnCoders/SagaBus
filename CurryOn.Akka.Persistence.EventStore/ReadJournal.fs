@@ -5,7 +5,7 @@ open Akka.Persistence.Query
 open CurryOn.Akka
 
 type EventStoreReadJournal (system: ExtendedActorSystem) =        
-    inherit QueryReadJournalBase(system, system.Settings.Config.GetConfig(EventStoreReadJournal.Identifier), EventStoreReadJournal.Identifier)
+    inherit QueryReadJournalBase(system, system.Settings.Config.GetConfig(EventStoreReadJournal.Identifier), EventStoreJournal.Identifier)
     static member Identifier = "akka.persistence.query.journal.event-store"
 
 type EventStoreReadJournalProvider (system: ExtendedActorSystem) =

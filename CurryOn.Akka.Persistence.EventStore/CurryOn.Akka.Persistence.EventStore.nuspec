@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.Akka.Persistence.EventStore</id>
-    <version>0.1.1-beta</version>
+    <version>0.1.2-beta</version>
     <title>Akka.Persistence.EventStore</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>

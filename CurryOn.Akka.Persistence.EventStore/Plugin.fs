@@ -16,6 +16,5 @@ type internal EventStorePlugin (system: ActorSystem) =
     new (context: IActorContext) = EventStorePlugin(context.System)    
     member __.Connect () = connection
     member __.Config = config
-    member __.Serialization = EventStoreSerialization(system)
     member __.Materializer = ActorMaterializer.Create(system)
     member __.Credentials = UserCredentials(settings.UserName, settings.Password)

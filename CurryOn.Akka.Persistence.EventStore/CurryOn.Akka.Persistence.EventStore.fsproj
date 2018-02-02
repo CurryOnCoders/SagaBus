@@ -53,7 +53,6 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Settings.fs" />
     <Compile Include="Model.fs" />
-    <Compile Include="Serialization.fs" />
     <Compile Include="Plugin.fs" />
     <Compile Include="WriteJournal.fs" />
     <Compile Include="ReadJournal.fs" />

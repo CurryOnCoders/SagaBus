@@ -38,21 +38,6 @@ module internal Settings =
             
         }
 
-type ElasticsearchSerialization (serialization: Serialization) =
-    new (actorSystem: ActorSystem) = ElasticsearchSerialization(actorSystem.Serialization)
-    member __.Serialize (persistenceId, sender, sequenceNr, manifest, writerGuid, payload) =
-        { PersistenceId = persistenceId
-          SequenceNumber = sequenceNr
-          EventType = manifest
-          Sender = sender
-          Event = payload |> box |> Serialization.toJson
-          WriterId = writerGuid
-          Tags = [||]
-        }
-    member __.Deserialize<'a> (persistedEvent: PersistedEvent) =
-        persistedEvent.Event |> Serialization.parseJson<obj> |> unbox<'a>
-
-
 type IElasticsearchPlugin =
     inherit IJournalPlugin
 
@@ -84,5 +69,4 @@ type ElasticsearchPlugin (system: ActorSystem) =
     new (context: IActorContext) = ElasticsearchPlugin(context.System)    
     member __.Connect () = connection
     member __.Config = system.Settings.Config
-    member __.Serialization = ElasticsearchSerialization(system)
     member __.Materializer = ActorMaterializer.Create(system)

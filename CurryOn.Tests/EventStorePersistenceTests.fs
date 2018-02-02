@@ -2,7 +2,11 @@
 
 open Akka.Actor
 open Akka.FSharp
+open Akka.Persistence.EventStore
+open Akka.Persistence.Query
+open CurryOn.Common
 open Microsoft.VisualStudio.TestTools.UnitTesting
+open System
 
 [<TestClass>]
 type EventStorePersistenceTests () =
@@ -62,7 +66,7 @@ type EventStorePersistenceTests () =
         employees <! {Name = "Rob Hobbit"; Position = "Currier"; Salary = 54862.95M}
         employees <! {Name = "Gerald Munk"; Position = "Lambda Invoker"; Salary = 48350.85M}
 
-        sleep 5
+        sleep 3
         employees <! TakeSnapshot
         sleep 2
 
@@ -86,3 +90,21 @@ type EventStorePersistenceTests () =
         Assert.AreEqual(allEmployees.Length, fetchedEmployees.Length)
         let persistedJim = fetchedEmployees |> List.find (fun e -> e.Name.StartsWith("Jim"))
         Assert.AreEqual(46044.56M, persistedJim.Salary)
+
+    [<TestMethod>]
+    member __.TestEventStoreReadJournal () =
+        let akka = actorSystem.Value
+        let materializer = Akka.Streams.ActorMaterializer.Create(akka)
+        let readJournal = PersistenceQuery.Get(akka).ReadJournalFor<EventStoreReadJournal>(EventStoreReadJournal.Identifier)
+        let employees = new System.Collections.Generic.List<string>()        
+        
+        let task = readJournal.CurrentPersistenceIds().RunForeach((fun id -> employees.Add(id)), materializer) |> Task.ofUnit |> Task.runSynchronously
+
+        sleep 2
+
+        Assert.IsTrue(employees.Count > 0)
+
+        for persistenceId in employees do
+            let events = new System.Collections.Generic.List<EventEnvelope>()
+            readJournal.CurrentEventsByPersistenceId(persistenceId, 0L, Int64.MaxValue).RunForeach((fun event -> events.Add(event)), materializer) |> Task.ofUnit |> Task.runSynchronously
+            Assert.IsTrue(events.Count > 0)
