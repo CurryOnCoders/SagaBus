@@ -147,7 +147,7 @@ module internal Elastic =
                 match indexRequest.Id with
                 | Some id -> client.IndexAsync<'index>(indexRequest.Document, (fun i -> i.Id(id.ToId()) :> IIndexRequest))
                 | None -> client.IndexAsync<'index>(indexRequest.Document)
-            return! if response |> isNotNull && response.IsValid && (response.Created || response.Result = Result.Updated)
+            return! if response |> isNotNull && response.IsValid
                     then let indexResponse =
                             { Index = response.Index
                               Type = response.Type
