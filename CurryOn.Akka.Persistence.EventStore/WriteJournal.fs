@@ -22,7 +22,7 @@ open Akka.Persistence.Query
 module EventJournal =
     let get (config: Config) (context: IActorContext) =
         let plugin = EventStorePlugin(context)
-        let connect () = plugin.Connect () 
+        let eventStore = plugin.Connect() |> Task.runSynchronously
         let readBatchSize = config.GetInt("read-batch-size", 4095)
         let getMetadataStream persistenceId = sprintf "snapshots-%s" persistenceId
         let getStream persistenceId version = sprintf "snapshot-%s-%d" persistenceId version
@@ -40,6 +40,7 @@ module EventJournal =
             let event = resolvedEvent.Event.Data |> parseJsonBytes<obj>
             (event, metadata)
 
+
         let rehydrateEvent persistenceId eventNumber (metadata: EventMetadata) (event: obj) =
             let persistent = Persistent(event, eventNumber + 1L, persistenceId, metadata.EventType, false, metadata.Sender)
             persistent :> IPersistentRepresentation
@@ -50,7 +51,6 @@ module EventJournal =
 
         let addSnapshotToMetadataLog (snapshot: JournalSnapshot) =
             operation {
-                let! eventStore = connect()
                 let logStream = getMetadataStream snapshot.PersistenceId
                 let snapshotMetadata = snapshot |> serializeSnapshotMetadata
                 let! writeResult = eventStore.AppendToStreamAsync(logStream, ExpectedVersion.Any |> int64, plugin.Credentials, snapshotMetadata)
@@ -59,7 +59,6 @@ module EventJournal =
 
         let writeSnapshot (snapshot: JournalSnapshot) =
             operation {
-                let! eventStore = connect()
                 let! eventMetadata = addSnapshotToMetadataLog snapshot
                 let eventData = EventData(Guid.NewGuid(), snapshot.Manifest, true, snapshot.Snapshot |> box |> toJsonBytes, eventMetadata) 
                 return! eventStore.AppendToStreamAsync(getStream snapshot.PersistenceId snapshot.SequenceNumber, ExpectedVersion.Any |> int64, plugin.Credentials, eventData)
@@ -67,7 +66,6 @@ module EventJournal =
 
         let rec findSnapshotMetadata (criteria: SnapshotSelectionCriteria) persistenceId startIndex =
             operation {
-                let! eventStore = connect()
                 let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(getMetadataStream persistenceId, startIndex, readBatchSize, true, userCredentials = plugin.Credentials)
                 let metadataFound = 
                     eventSlice.Events
@@ -86,7 +84,6 @@ module EventJournal =
 
         let findSnapshot criteria persistenceId =
             operation {
-                let! eventStore = connect()
                 let! snapshotMetadata = findSnapshotMetadata criteria persistenceId -1L (*end*)
                 match snapshotMetadata with
                 | Some metadata ->
@@ -97,12 +94,11 @@ module EventJournal =
                 | None -> return None            
             }
 
-        {new  IEventJournal with
+        {new IEventJournal with
             member __.GetCurrentPersistenceIds () =
                 operation {
                     let rec readSlice startPosition ids =
                         task {
-                            let! eventStore = connect()
                             let! eventSlice = eventStore.ReadStreamEventsForwardAsync("$streams", startPosition, readBatchSize, true, userCredentials = plugin.Credentials)
                             let newIds = 
                                 eventSlice.Events 
@@ -117,7 +113,6 @@ module EventJournal =
                 }
             member __.PersistEvents eventsToPersist =
                 operation {
-                    let! eventStore = connect()
                     let! result =
                         eventsToPersist 
                         |> Seq.groupBy (fun event -> event.PersistenceId)
@@ -140,7 +135,6 @@ module EventJournal =
                 }
             member __.DeleteEvents persistenceId upperLimit =
                 operation {
-                    let! eventStore = connect()
                     let! metadataResult = eventStore.GetStreamMetadataAsync(persistenceId, plugin.Credentials)
                     let metadata = metadataResult.StreamMetadata
                     let newMetadata = StreamMetadata.Create(metadata.MaxCount, metadata.MaxAge, upperLimit |> Nullable, metadata.CacheControl, metadata.Acl)
@@ -149,7 +143,6 @@ module EventJournal =
                 }
             member __.GetMaxSequenceNumber persistenceId from =
                 operation {
-                    let! eventStore = connect()
                     let! eventResult = eventStore.ReadEventAsync(persistenceId, StreamPosition.End |> int64, true, plugin.Credentials)
                     match eventResult.Status with
                     | EventReadStatus.Success -> 
@@ -166,7 +159,6 @@ module EventJournal =
                 }
             member __.GetEvents persistenceId first last max =
                 operation {
-                    let! eventStore = connect()
                     let stopped = AsyncManualResetEvent(initialState = false)
                     let start = Math.Max(0L, first - 2L)
                     let eventsToRead = Math.Min(last - start + 1L, max)
@@ -186,7 +178,6 @@ module EventJournal =
                 }
             member __.GetTaggedEvents tag lowOffset highOffset =
                 operation {
-                    let! eventStore = plugin.Connect()
                     let position = 
                         match lowOffset with
                         | Some offset -> if offset = 0L then Position.Start else Position(offset, offset)
@@ -235,7 +226,6 @@ module EventJournal =
                 }
             member __.DeleteSnapshots persistenceId criteria =
                 operation {
-                    let! eventStore = connect()
                     let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(getMetadataStream persistenceId, -1L, readBatchSize, true, userCredentials = plugin.Credentials)
 
                     let! result =
@@ -249,7 +239,6 @@ module EventJournal =
                 }
             member __.DeleteAllSnapshots persistenceId sequenceNumber =
                 operation {
-                    let! eventStore = connect()
                     let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(getMetadataStream persistenceId, -1L, readBatchSize, true, userCredentials = plugin.Credentials)
 
                     let! result = 

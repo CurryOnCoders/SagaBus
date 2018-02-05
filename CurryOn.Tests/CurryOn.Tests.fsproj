@@ -57,6 +57,7 @@
     <Compile Include="ElasticsearchPersistenceTests.fs" />
     <Content Include="App.config" />
     <None Include="CleanupElastic.fsx" />
+    <None Include="Benchmark.fsx" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
