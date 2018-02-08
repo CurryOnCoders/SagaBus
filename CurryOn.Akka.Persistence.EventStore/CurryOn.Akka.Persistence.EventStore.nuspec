@@ -12,7 +12,7 @@
     <description>Akka.net Persistence Plug-in for EventStore.  Includes Event Journal, Snapshot Store, and Query Read Journal.</description>
     <releaseNotes>Improved management of Snapshots and Snapshot metadata.</releaseNotes>
     <copyright>Copyright 2018</copyright>
-    <tags>Akka Akka.net Persistence Elasticsearch Elastic Search event journal snapshot</tags>
+    <tags>Akka Akka.net Persistence EventStore GetEventStore Search event journal snapshot</tags>
     <dependencies>
       <dependency id="Akka" version="1.2.3" />
       <dependency id="Akka.Persistence" version="1.2.3.43-beta" />
