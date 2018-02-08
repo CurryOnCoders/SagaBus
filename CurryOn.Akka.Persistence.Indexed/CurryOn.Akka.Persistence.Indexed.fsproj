@@ -5,14 +5,14 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>6c1347d5-7edb-4df1-8aaa-63cd3a7133f3</ProjectGuid>
+    <ProjectGuid>3ad73d03-2f2f-410c-9f7b-c0bfd6d4f886</ProjectGuid>
     <OutputType>Library</OutputType>
-    <RootNamespace>CurryOn.Akka.Persistence.Elasticsearch</RootNamespace>
-    <AssemblyName>CurryOn.Akka.Persistence.Elasticsearch</AssemblyName>
+    <RootNamespace>CurryOn.Akka.Persistence.Indexed</RootNamespace>
+    <AssemblyName>CurryOn.Akka.Persistence.Indexed</AssemblyName>
     <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.1.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>CurryOn.Akka.Persistence.Elasticsearch</Name>
+    <Name>CurryOn.Akka.Persistence.Indexed</Name>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -51,20 +51,16 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Common.fs" />
-    <Compile Include="Model.fs" />
-    <Compile Include="Plugin.fs" />
-    <Compile Include="Query.fs" />
-    <Compile Include="WriteJournal.fs" />
-    <Compile Include="ReadJournal.fs" />
-    <None Include="ReadMe.md" />
+    <Compile Include="Messages.fs" />
+    <Compile Include="EventJournal.fs" />
+    <Compile Include="Actors.fs" />
+    <Compile Include="QueryJournal.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
-    <None Include="CurryOn.Akka.Persistence.Elasticsearch.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Akka">
-      <HintPath>..\packages\Akka.1.2.3\lib\net45\Akka.dll</HintPath>
+      <HintPath>..\packages\Akka.1.3.4\lib\net45\Akka.dll</HintPath>
     </Reference>
     <Reference Include="Akka.FSharp">
       <HintPath>..\packages\Akka.FSharp.1.2.3\lib\net45\Akka.FSharp.dll</HintPath>
@@ -72,17 +68,11 @@
     <Reference Include="Akka.Persistence">
       <HintPath>..\packages\Akka.Persistence.1.2.3.43-beta\lib\net45\Akka.Persistence.dll</HintPath>
     </Reference>
-    <Reference Include="Akka.Persistence.FSharp">
-      <HintPath>..\packages\Akka.Persistence.FSharp.1.2.3.43-beta\lib\net45\Akka.Persistence.FSharp.dll</HintPath>
-    </Reference>
     <Reference Include="Akka.Persistence.Query">
       <HintPath>..\packages\Akka.Persistence.Query.1.2.3.43-beta\lib\net45\Akka.Persistence.Query.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Streams">
       <HintPath>..\packages\Akka.Streams.1.2.3\lib\net45\Akka.Streams.dll</HintPath>
-    </Reference>
-    <Reference Include="Elasticsearch.Net">
-      <HintPath>..\packages\Elasticsearch.Net.5.6.0\lib\net46\Elasticsearch.Net.dll</HintPath>
     </Reference>
     <Reference Include="FSharp.Core">
       <HintPath>..\packages\FSharp.Core.4.1.17\lib\net45\FSharp.Core.dll</HintPath>
@@ -93,12 +83,14 @@
     <Reference Include="FSharp.PowerPack.Linq">
       <HintPath>..\packages\FSPowerPack.Linq.Community.3.0.0.0\Lib\Net40\FSharp.PowerPack.Linq.dll</HintPath>
     </Reference>
-    <Reference Include="FsPickler, Version=3.2.0.0, Culture=neutral, PublicKeyToken=null">
+    <Reference Include="FsPickler">
       <HintPath>..\packages\FsPickler.3.2.0\lib\net45\FsPickler.dll</HintPath>
-      <SpecificVersion>True</SpecificVersion>
     </Reference>
     <Reference Include="FsPickler.Json">
       <HintPath>..\packages\FsPickler.Json.3.2.0\lib\net45\FsPickler.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Google.Protobuf">
+      <HintPath>..\packages\Google.Protobuf.3.3.0\lib\net45\Google.Protobuf.dll</HintPath>
     </Reference>
     <Reference Include="Google.ProtocolBuffers">
       <HintPath>..\packages\Google.ProtocolBuffers.2.4.1.555\lib\net40\Google.ProtocolBuffers.dll</HintPath>
@@ -107,11 +99,8 @@
       <HintPath>..\packages\Google.ProtocolBuffers.2.4.1.555\lib\net40\Google.ProtocolBuffers.Serialization.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
-    <Reference Include="Nest">
-      <HintPath>..\packages\NEST.5.6.0\lib\net46\Nest.dll</HintPath>
-    </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\packages\Newtonsoft.Json.10.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\packages\Newtonsoft.Json.9.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="Reactive.Streams">
       <HintPath>..\packages\Reactive.Streams.1.0.2\lib\net45\Reactive.Streams.dll</HintPath>
@@ -120,6 +109,7 @@
     <Reference Include="System.Collections.Immutable">
       <HintPath>..\packages\System.Collections.Immutable.1.3.1\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll</HintPath>
     </Reference>
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Runtime.Serialization" />
@@ -134,19 +124,9 @@
       <Project>{b502bb9d-6954-476a-b7bd-8900d78a73fe}</Project>
       <Private>True</Private>
     </ProjectReference>
-    <ProjectReference Include="..\CurryOn.Akka.Persistence.Indexed\CurryOn.Akka.Persistence.Indexed.fsproj">
-      <Name>CurryOn.Akka.Persistence.Indexed</Name>
-      <Project>{3ad73d03-2f2f-410c-9f7b-c0bfd6d4f886}</Project>
-      <Private>True</Private>
-    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Common\CurryOn.Common.fsproj">
       <Name>CurryOn.Common</Name>
       <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\CurryOn.Elastic.FSharp\CurryOn.Elastic.FSharp.fsproj">
-      <Name>CurryOn.Elastic.FSharp</Name>
-      <Project>{ef3be7ff-1fb2-43ed-a24b-b6368392a1ff}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\CurryOn.FSharp.Control\CurryOn.FSharp.Control.fsproj">

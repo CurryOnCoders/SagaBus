@@ -19,6 +19,7 @@
 #r @"..\packages\Reactive.Streams.1.0.2\lib\net45\Reactive.Streams.dll"
 #r @"..\packages\System.Collections.Immutable.1.3.1\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll"
 #r @"..\packages\System.ValueTuple.4.3.0\lib\netstandard1.0\System.ValueTuple.dll"
+#r @"C:\Projects\GitHub\CurryOn\packages\Microsoft.VisualStudio.Threading.15.4.4\lib\net45\Microsoft.VisualStudio.Threading.dll"
 #r @"../CurryOn.Common/bin/debug/CurryOn.Common.dll"
 #r @"bin/debug/CurryOn.Akka.Persistence.EventStore.dll"
 
@@ -288,3 +289,16 @@ let rec readSlice startPosition ids =
 
 let persistenceIds = Set.empty<string> |> readSlice 0L
 for id in persistenceIds.Result do printfn "%s" id
+
+
+
+
+
+
+open Microsoft.VisualStudio.Threading
+open EventStore.ClientAPI
+
+let getConnection = 
+    let connection = EventStoreConnection.Create("")
+    let lazyConnection = new AsyncLazy<IEventStoreConnection>(fun () -> connection.ConnectAsync(); connection)
+    fun () -> laz.Value

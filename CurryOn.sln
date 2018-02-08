@@ -31,6 +31,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.Akka.Persistence.El
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.Akka.Persistence.Streaming", "CurryOn.Akka.Persistence.Streaming\CurryOn.Akka.Persistence.Streaming.fsproj", "{4C931853-7ADA-4777-8C62-4FD06DCC27E2}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.Akka.Persistence.Common", "CurryOn.Akka.Persistence.Common\CurryOn.Akka.Persistence.Common.fsproj", "{B502BB9D-6954-476A-B7BD-8900D78A73FE}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "CurryOn.Akka.Persistence.Indexed", "CurryOn.Akka.Persistence.Indexed\CurryOn.Akka.Persistence.Indexed.fsproj", "{3AD73D03-2F2F-410C-9F7B-C0BFD6D4F886}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -81,6 +85,14 @@ Global
 		{4C931853-7ADA-4777-8C62-4FD06DCC27E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4C931853-7ADA-4777-8C62-4FD06DCC27E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4C931853-7ADA-4777-8C62-4FD06DCC27E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B502BB9D-6954-476A-B7BD-8900D78A73FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B502BB9D-6954-476A-B7BD-8900D78A73FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B502BB9D-6954-476A-B7BD-8900D78A73FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B502BB9D-6954-476A-B7BD-8900D78A73FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3AD73D03-2F2F-410C-9F7B-C0BFD6D4F886}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3AD73D03-2F2F-410C-9F7B-C0BFD6D4F886}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3AD73D03-2F2F-410C-9F7B-C0BFD6D4F886}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3AD73D03-2F2F-410C-9F7B-C0BFD6D4F886}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

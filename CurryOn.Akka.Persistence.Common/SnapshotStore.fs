@@ -11,7 +11,7 @@ open System
 open System.Threading.Tasks
 
 [<AbstractClass>]
-type StreamingSnapshotStore<'provider when 'provider :> IEventJournalProvider and 'provider: (new: unit -> 'provider)> (config: Config) =
+type SnapshotStoreBase<'provider when 'provider :> IEventJournalProvider and 'provider: (new: unit -> 'provider)> (config: Config) =
     inherit SnapshotStore()
     let context = SnapshotStore.Context
     let provider = new 'provider() :> IEventJournalProvider

@@ -5,26 +5,30 @@ open Akka.Configuration
 open Akka.Persistence
 open Akka.Persistence.EventStore
 open Akka.Persistence.Journal
+open Akka.Persistence.Query
 open Akka.Streams
 open Akka.Streams.Dsl
 open CurryOn.Akka
 open CurryOn.Akka.Serialization
 open CurryOn.Common
-open FSharp.Control
 open EventStore.ClientAPI
+open FSharp.Control
 open Microsoft.VisualStudio.Threading
+open Reactive.Streams
 open System
 open System.Collections.Immutable
 open System.Threading
 open System.Threading.Tasks
-open Akka.Persistence.Query
 
 module EventJournal =
-    let get (config: Config) (context: IActorContext) =
-        let plugin = EventStorePlugin(context)
+    let get (config: Config) (system: ActorSystem) =
+        let plugin = EventStorePlugin(system)
         let eventStore = plugin.Connect() |> Task.runSynchronously
         let readBatchSize = config.GetInt("read-batch-size", 4095)
         let getSnapshotStream persistenceId = sprintf "snapshots-%s" persistenceId
+        let catchUpSettings = 
+            let def = CatchUpSubscriptionSettings.Default
+            CatchUpSubscriptionSettings(def.MaxLiveQueueSize, readBatchSize, def.VerboseLogging, true) 
         let serializeSnapshotMetadata (snapshot: JournalSnapshot) =
             let metadata = {PersistenceId = snapshot.PersistenceId; SequenceNumber = snapshot.SequenceNumber; Timestamp = snapshot.Timestamp}
             metadata |> toJsonBytes
@@ -37,6 +41,16 @@ module EventJournal =
             let metadata = resolvedEvent.Event.Metadata |> parseJsonBytes<EventMetadata>
             let event = resolvedEvent.Event.Data |> parseJsonBytes<obj>
             (event, metadata)
+        let getJournaledEvent resolvedEvent =
+            let event, metadata = deserializeEvent resolvedEvent
+            { PersistenceId = resolvedEvent.Event.EventStreamId
+              SequenceNumber = metadata.SequenceNumber
+              Sender = metadata.Sender
+              Manifest = metadata.EventType 
+              WriterId = Guid.NewGuid() |> string
+              Event = event
+              Tags = metadata.Tags
+            }
 
         let rehydrateEvent persistenceId eventNumber (metadata: EventMetadata) (event: obj) =
             let persistent = Persistent(event, eventNumber + 1L, persistenceId, metadata.EventType, false, metadata.Sender)
@@ -76,7 +90,7 @@ module EventJournal =
                 return! findSnapshotMetadata criteria persistenceId -1L (*end*)            
             }
 
-        {new IEventJournal with
+        {new IStreamingEventJournal with
             member __.GetCurrentPersistenceIds () =
                 operation {
                     let rec readSlice startPosition ids =
@@ -246,16 +260,33 @@ module EventJournal =
 
                     return! Result.successWithEvents () [DeletedSuccessfully]
                 }
+            member __.SubscribeToEvents persistenceId fromSequence =
+                {new IPublisher<JournaledEvent> with
+                    member __.Subscribe subscriber = 
+                        eventStore.SubscribeToStreamFrom(persistenceId, fromSequence |> Nullable, catchUpSettings, (fun _ event -> event |> getJournaledEvent |> subscriber.OnNext), userCredentials = plugin.Credentials)
+                        |> ignore
+                }
+            member __.SubscribeToPersistenceIds () =
+                {new IPublisher<string> with
+                    member __.Subscribe subscriber = 
+                        let notifyEvent (event: ResolvedEvent) =
+                            if event.Event |> isNotNull
+                            then event.Event.EventStreamId |> subscriber.OnNext
+
+                        eventStore.SubscribeToStreamFrom("$streams", Nullable 0L, catchUpSettings, (fun _ event -> notifyEvent event), userCredentials = plugin.Credentials)
+                        |> ignore
+                }
         }
 
 type EventStoreProvider() =
-    interface IEventJournalProvider with
-        member __.GetEventJournal config context = EventJournal.get config context
+    interface IStreamingEventJournalProvider with
+        member __.GetEventJournal config context = EventJournal.get config context.System :> IEventJournal
+        member __.GetStreamingEventJournal config system = EventJournal.get config system
 
 type EventStoreJournal (config: Config) =
     inherit StreamingEventJournal<EventStoreProvider>(config)
     static member Identifier = "akka.persistence.journal.event-store"
 
 type EventStoreSnapshotStore (config: Config) =
-    inherit StreamingSnapshotStore<EventStoreProvider>(config)
+    inherit SnapshotStoreBase<EventStoreProvider>(config)
     static member Identifier = "akka.persistence.snapshot-store.event-store"

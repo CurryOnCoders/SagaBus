@@ -162,9 +162,9 @@ type ElasticsearchProvider() =
         member __.GetEventJournal config context = EventJournal.get config context
 
 type ElasticsearchJournal (config: Config) =
-    inherit StreamingEventJournal<ElasticsearchProvider>(config)
+    inherit IndexedEventJournal<ElasticsearchProvider>(config)
     static member Identifier = "akka.persistence.journal.elasticsearch"
 
 type ElasticsearchSnapshotStore (config: Config) =
-    inherit StreamingSnapshotStore<ElasticsearchProvider>(config)
+    inherit SnapshotStoreBase<ElasticsearchProvider>(config)
     static member Identifier = "akka.persistence.snapshot-store.elasticsearch"

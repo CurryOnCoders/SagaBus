@@ -51,14 +51,8 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Common.fs" />
-    <Compile Include="Serialization.fs" />
-    <Compile Include="Model.fs" />
-    <Compile Include="Messages.fs" />
     <Compile Include="EventJournal.fs" />
-    <Compile Include="SnapshotStore.fs" />
-    <Compile Include="Actors.fs" />
-    <Compile Include="QueryJournal.fs" />
+    <Compile Include="SubscriberQuery.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
     <None Include="CurryOn.Akka.Persistence.Streaming.nuspec" />
@@ -123,6 +117,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CurryOn.Akka.Persistence.Common\CurryOn.Akka.Persistence.Common.fsproj">
+      <Name>CurryOn.Akka.Persistence.Common</Name>
+      <Project>{b502bb9d-6954-476a-b7bd-8900d78a73fe}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Common\CurryOn.Common.fsproj">
       <Name>CurryOn.Common</Name>
       <Project>{78b27b61-4f5c-4e69-b18f-4b6f6303f77b}</Project>

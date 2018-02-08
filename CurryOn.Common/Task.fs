@@ -66,6 +66,14 @@ module Task =
     let cancellation<'a> () = 
         FromCancellation<'a> ()
 
+    let map<'a,'b> (f: 'a -> 'b) (task: Task<'a>) =
+        task.ContinueWith(fun (t: Task<'a>) -> 
+            if t.IsFaulted
+            then Task.FromException<'b> t.Exception
+            elif t.IsCanceled
+            then FromCancellation<'b> ()
+            else Task.FromResult (f t.Result)).Unwrap()
+
 type TaskStep<'result> =
 | Value of 'result
 | AsyncValue of 'result Task

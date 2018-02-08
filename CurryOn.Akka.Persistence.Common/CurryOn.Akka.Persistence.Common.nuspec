@@ -1,18 +1,18 @@
 ﻿<?xml version="1.0"?>
 <package >
   <metadata>
-    <id>CurryOn.Akka.Persistence.EventStore</id>
-    <version>0.1.4-beta</version>
-    <title>Akka.Persistence.EventStore</title>
+    <id>CurryOn.Akka.Persistence.Common</id>
+    <version>0.1.0-beta</version>
+    <title>Akka.Persistence.Common</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
     <licenseUrl>https://github.com/CurryOnCoders/CurryOn/blob/master/LICENSE</licenseUrl>
-    <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Akka.Persistence.EventStore</projectUrl>
+    <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Akka.Persistence.Streaming</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>Akka.net Persistence Plug-in for EventStore.  Includes Event Journal, Snapshot Store, and Query Read Journal.</description>
-    <releaseNotes>Improved management of Snapshots and Snapshot metadata.</releaseNotes>
+    <description>Framework for creating Akka.net Persistence Plug-Ins.</description>
+    <releaseNotes>Initial Release.</releaseNotes>
     <copyright>Copyright 2018</copyright>
-    <tags>Akka Akka.net Persistence EventStore GetEventStore Search event journal snapshot</tags>
+    <tags>Akka Akka.net Persistence</tags>
     <dependencies>
       <dependency id="Akka" version="1.2.3" />
       <dependency id="Akka.Persistence" version="1.2.3.43-beta" />
@@ -20,9 +20,8 @@
       <dependency id="Akka.Persistence.Query" version="1.2.3.43-beta" />
       <dependency id="Akka.Serialization.Hyperion" version="1.2.3.43-beta" />
       <dependency id="Akka.Streams" version="1.2.3" />
-      <dependency id="CurryOn.Akka.Persistence.Streaming" version="0.1.2-beta" />
       <dependency id="CurryOn.Common" version="0.1.1" />
-      <dependency id="EventStore.Client" version="4.0.3" />
+      <dependency id="CurryOn.FSharp.Control" version="0.1.4" />
       <dependency id="FsPickler" version="3.2.0" />
       <dependency id="FsPickler.Json" version="3.2.0" />
       <dependency id="Newtonsoft.Json" version="9.0.1" />
@@ -32,3 +31,4 @@
     </dependencies>
   </metadata>
 </package>
+

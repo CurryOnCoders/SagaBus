@@ -128,6 +128,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CurryOn.Akka.Persistence.Common\CurryOn.Akka.Persistence.Common.fsproj">
+      <Name>CurryOn.Akka.Persistence.Common</Name>
+      <Project>{b502bb9d-6954-476a-b7bd-8900d78a73fe}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Akka.Persistence.Streaming\CurryOn.Akka.Persistence.Streaming.fsproj">
       <Name>CurryOn.Akka.Persistence.Streaming</Name>
       <Project>{4c931853-7ada-4777-8c62-4fd06dcc27e2}</Project>

@@ -7,7 +7,7 @@ open Akka.Streams.Dsl
 open Akka.Persistence.Query
 
 [<AbstractClass>]
-type QueryReadJournalBase (system: ExtendedActorSystem, config: Config, identifier: string) =
+type IndexedQueryReadJournalBase (system: ExtendedActorSystem, config: Config, identifier: string) =
     let readBatchSize = config.GetInt("read-batch-size", 1024)
     let maxBufferSize = config.GetLong("max-buffer-size", 4096L)
 

@@ -287,6 +287,12 @@ module Result =
       | Warn (_,warnings) -> Failure warnings
       | _  -> result 
 
+    /// Map an OperationResult<'a,'e> into an OperationResult<'b,'e>
+    let inline map<'a,'b,'e> (f: 'a -> 'b) (result: OperationResult<'a,'e>) =
+        match result with
+        | Success success -> successWithEvents (success.Result |> f) success.Events
+        | Failure errors -> failure errors
+
 /// A specific case of System.Threading.Tasks.Task<'t> which carries a list of events
 /// along with the result of the task, to enable asynchronous operations to propogate
 /// events from one step in an operation to the next.
@@ -374,6 +380,35 @@ module Operation =
 
     /// Returns a Task<OperationResult<'result,'event>> representing the result of the operation when it completes
     let inline waitTask operation = operation |> (waitAsync >> Async.StartAsTask)
+
+    /// Convert an Operation<'a,'b> into a Task<'a>
+    let inline toTask<'a,'e> =
+        waitTask >> fun (result: Task<OperationResult<'a,'e>>) ->
+            result.ContinueWith(fun (task: Task<OperationResult<'a,'e>>) -> 
+                let completionSource = new TaskCompletionSource<'a>()
+                match task.Result with
+                | Success success -> success.Result |> completionSource.SetResult
+                | Failure errors -> OperationFailedException(errors) |> completionSource.SetException
+                completionSource.Task).Unwrap()
+
+    /// Map an Operation<'a,'e> into an Operation<'b,'e>
+    let rec map<'a,'b,'e> (f: 'a -> 'b) (operation: Operation<'a,'e>) =
+        match operation with
+        | Completed result -> result |> Result.map f |> Completed
+        | InProcess inProcess -> inProcess.ContinueWith(fun (task: Task<'a*'e list>) -> 
+            let completionSource = new TaskCompletionSource<'b*'e list>()
+            if task.IsFaulted
+            then completionSource.SetException task.Exception
+            elif task.IsCanceled
+            then completionSource.SetCanceled()
+            else let (result,events) = task.Result
+                 completionSource.SetResult (f result, events)
+            completionSource.Task).Unwrap() |> InProcess
+        | Deferred deferred -> lazy(deferred.Value |> map f) |> EventingLazy |> Deferred
+        | Cancelled events -> Cancelled events
+
+    /// Map an Operation<'a,'e> into a Task<'b>
+    let inline mapToTask f = map f >> toTask
 
     /// Synchronously wait for an Operation to complete
     let rec complete operation =
