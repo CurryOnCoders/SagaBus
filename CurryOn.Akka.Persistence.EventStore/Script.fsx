@@ -201,7 +201,7 @@ let hocon = """akka {
                 plugin = "akka.persistence.journal.event-store"
                 event-store {
                     class = "Akka.Persistence.EventStore.EventStoreJournal, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "localhost"
+                    server-name = "corpweiapd001"
                     write-batch-size = 4095
                     read-batch-size = 4095
                 }
@@ -210,7 +210,7 @@ let hocon = """akka {
                 plugin = "akka.persistence.snapshot-store.event-store"
                 event-store {
                     class = "Akka.Persistence.EventStore.EventStoreSnapshotStore, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "localhost"
+                    server-name = "corpweiapd001"
                     read-batch-size = 4095
                 }
               }
@@ -255,3 +255,36 @@ let settings = CatchUpSubscriptionSettings(CatchUpSubscriptionSettings.Default.M
 eventStore.SubscribeToStreamFrom("employee-9ff873e4-f991-4f61-9df4-a13986139019", 0L |> Nullable, settings, 
                                     (fun subscription event -> printfn "%A" event), 
                                     userCredentials = credentials)
+
+
+
+
+
+
+
+open System.Net
+let eventStore = EventStoreConnection.Create(IPEndPoint(IPAddress.Parse("10.100.1.35"), 1113))
+let credentials = SystemData.UserCredentials("admin", "changeit")
+
+eventStore.ConnectAsync() |> Task.ofUnit |> Task.runSynchronously
+
+let rec readSlice startPosition ids =
+    task {
+        let! eventSlice = eventStore.ReadStreamEventsForwardAsync("$streams", startPosition, 4095, true, userCredentials = credentials)
+        let newIds = 
+            eventSlice.Events 
+            |> Seq.map (fun resolved -> 
+                printfn "%s" resolved.Event.EventStreamId
+                if resolved.Event |> isNotNull
+                then resolved.Event.EventStreamId
+                else resolved.OriginalStreamId)
+            |> Seq.filter (fun stream -> (stream.StartsWith("$") || stream.StartsWith("snapshots")) |> not )
+            |> Seq.distinct
+            |> Seq.fold (fun acc cur -> acc |> Set.add cur) ids
+        if eventSlice.IsEndOfStream |> not
+        then return! newIds |> readSlice eventSlice.NextEventNumber
+        else return newIds
+    }
+
+let persistenceIds = Set.empty<string> |> readSlice 0L
+for id in persistenceIds.Result do printfn "%s" id

@@ -30,7 +30,7 @@ type EventStorePersistenceTests () =
                 plugin = "akka.persistence.journal.event-store"
                 event-store {
                     class = "Akka.Persistence.EventStore.EventStoreJournal, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "localhost"
+                    server-name = "corpweiapd001"
                     write-batch-size = 4095
                     read-batch-size = 4095
                 }
@@ -39,7 +39,7 @@ type EventStorePersistenceTests () =
                 plugin = "akka.persistence.snapshot-store.event-store"
                 event-store {
                     class = "Akka.Persistence.EventStore.EventStoreSnapshotStore, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "localhost"
+                    server-name = "corpweiapd001"
                     read-batch-size = 4095
                 }
               }
@@ -47,7 +47,7 @@ type EventStorePersistenceTests () =
                 journal {
                   event-store {
                     class = "Akka.Persistence.EventStore.EventStoreReadJournalProvider, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "localhost"
+                    server-name = "corpweiapd001"
                     read-batch-size = 4095
                   }
                 }  

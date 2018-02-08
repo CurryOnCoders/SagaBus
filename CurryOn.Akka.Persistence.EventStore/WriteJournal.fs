@@ -24,22 +24,19 @@ module EventJournal =
         let plugin = EventStorePlugin(context)
         let eventStore = plugin.Connect() |> Task.runSynchronously
         let readBatchSize = config.GetInt("read-batch-size", 4095)
-        let getMetadataStream persistenceId = sprintf "snapshots-%s" persistenceId
-        let getStream persistenceId version = sprintf "snapshot-%s-%d" persistenceId version
+        let getSnapshotStream persistenceId = sprintf "snapshots-%s" persistenceId
         let serializeSnapshotMetadata (snapshot: JournalSnapshot) =
             let metadata = {PersistenceId = snapshot.PersistenceId; SequenceNumber = snapshot.SequenceNumber; Timestamp = snapshot.Timestamp}
-            let bytes = metadata |> toJsonBytes
-            EventData(Guid.NewGuid(), typeof<SnapshotMetadata>.Name, true, bytes, [||])
+            metadata |> toJsonBytes
         let deserializeSnapshotMetadata (resolvedEvent: ResolvedEvent) = 
-            resolvedEvent.Event.Data |> parseJsonBytes<SnapshotMetadata>
+            resolvedEvent.Event.Metadata |> parseJsonBytes<SnapshotMetadata>
         let serializeEvent (event: JournaledEvent) = 
-            let eventMetadata = {EventType = event.Manifest; Sender = event.Sender; Tags = event.Tags}
+            let eventMetadata = {SequenceNumber = event.SequenceNumber; EventType = event.Manifest; Sender = event.Sender; Tags = event.Tags}
             EventData(Guid.NewGuid(), event.Manifest, true, event.Event |> box |> toJsonBytes, eventMetadata |> toJsonBytes)
         let deserializeEvent (resolvedEvent: ResolvedEvent) =
             let metadata = resolvedEvent.Event.Metadata |> parseJsonBytes<EventMetadata>
             let event = resolvedEvent.Event.Data |> parseJsonBytes<obj>
             (event, metadata)
-
 
         let rehydrateEvent persistenceId eventNumber (metadata: EventMetadata) (event: obj) =
             let persistent = Persistent(event, eventNumber + 1L, persistenceId, metadata.EventType, false, metadata.Sender)
@@ -49,30 +46,22 @@ module EventJournal =
             let event, metadata = deserializeEvent resolvedEvent
             rehydrateEvent resolvedEvent.Event.EventStreamId resolvedEvent.Event.EventNumber metadata event
 
-        let addSnapshotToMetadataLog (snapshot: JournalSnapshot) =
-            operation {
-                let logStream = getMetadataStream snapshot.PersistenceId
-                let snapshotMetadata = snapshot |> serializeSnapshotMetadata
-                let! writeResult = eventStore.AppendToStreamAsync(logStream, ExpectedVersion.Any |> int64, plugin.Credentials, snapshotMetadata)
-                return snapshotMetadata.Data
-            }
-
         let writeSnapshot (snapshot: JournalSnapshot) =
             operation {
-                let! eventMetadata = addSnapshotToMetadataLog snapshot
-                let eventData = EventData(Guid.NewGuid(), snapshot.Manifest, true, snapshot.Snapshot |> box |> toJsonBytes, eventMetadata) 
-                return! eventStore.AppendToStreamAsync(getStream snapshot.PersistenceId snapshot.SequenceNumber, ExpectedVersion.Any |> int64, plugin.Credentials, eventData)
+                let snapshotMetadata = snapshot |> serializeSnapshotMetadata
+                let eventData = EventData(Guid.NewGuid(), snapshot.Manifest, true, snapshot.Snapshot |> box |> toJsonBytes, snapshotMetadata) 
+                return! eventStore.AppendToStreamAsync(getSnapshotStream snapshot.PersistenceId, ExpectedVersion.Any |> int64, plugin.Credentials, eventData)
             }
 
         let rec findSnapshotMetadata (criteria: SnapshotSelectionCriteria) persistenceId startIndex =
             operation {
-                let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(getMetadataStream persistenceId, startIndex, readBatchSize, true, userCredentials = plugin.Credentials)
+                let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(getSnapshotStream persistenceId, startIndex, readBatchSize, true, userCredentials = plugin.Credentials)
                 let metadataFound = 
                     eventSlice.Events
-                    |> Seq.map deserializeSnapshotMetadata
-                    |> Seq.tryFind (fun metadata -> metadata.SequenceNumber <= criteria.MaxSequenceNr && metadata.Timestamp <= criteria.MaxTimeStamp)
+                    |> Seq.map (fun event -> (event, deserializeSnapshotMetadata event))
+                    |> Seq.tryFind (fun (event, metadata) -> metadata.SequenceNumber <= criteria.MaxSequenceNr && metadata.Timestamp <= criteria.MaxTimeStamp)
                 match metadataFound with
-                | Some metadata -> return metadata |> Some
+                | Some (event, metadata) -> return (metadata, event.Event.Data |> parseJsonBytes<obj>) |> Some
                 | None -> 
                     let lastEvent = if eventSlice.Events |> isNull || eventSlice.Events.Length = 0
                                     then -1L
@@ -84,14 +73,7 @@ module EventJournal =
 
         let findSnapshot criteria persistenceId =
             operation {
-                let! snapshotMetadata = findSnapshotMetadata criteria persistenceId -1L (*end*)
-                match snapshotMetadata with
-                | Some metadata ->
-                    let snapshotStream = getStream metadata.PersistenceId metadata.SequenceNumber
-                    let! snapshotReadResult = eventStore.ReadEventAsync(snapshotStream, StreamPosition.End |> int64, true, userCredentials = plugin.Credentials) 
-                    let snapshotEvent = snapshotReadResult.Event.Value
-                    return (metadata, snapshotEvent.Event.Data |> parseJsonBytes<obj>) |> Some
-                | None -> return None            
+                return! findSnapshotMetadata criteria persistenceId -1L (*end*)            
             }
 
         {new IEventJournal with
@@ -103,7 +85,9 @@ module EventJournal =
                             let newIds = 
                                 eventSlice.Events 
                                 |> Seq.filter (fun resolved -> resolved.Event |> isNotNull)
-                                |> Seq.map (fun resolved -> resolved.Event.EventStreamId) |> Seq.fold (fun acc cur -> acc |> Set.add cur) ids
+                                |> Seq.map (fun resolved -> resolved.Event.EventStreamId) 
+                                |> Seq.filter (fun stream -> stream.StartsWith("snapshots") |> not)
+                                |> Seq.fold (fun acc cur -> acc |> Set.add cur) ids
                             if eventSlice.IsEndOfStream |> not
                             then return! newIds |> readSlice eventSlice.NextEventNumber
                             else return newIds
@@ -226,27 +210,39 @@ module EventJournal =
                 }
             member __.DeleteSnapshots persistenceId criteria =
                 operation {
-                    let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(getMetadataStream persistenceId, -1L, readBatchSize, true, userCredentials = plugin.Credentials)
+                    let stream = getSnapshotStream persistenceId
+                    let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(stream, -1L, readBatchSize, true, userCredentials = plugin.Credentials)
 
-                    let! result =
+                    let upperLimit =
                         eventSlice.Events
-                        |> Seq.map deserializeSnapshotMetadata
-                        |> Seq.filter (fun metadata -> metadata.SequenceNumber >= criteria.MinSequenceNr && metadata.SequenceNumber <= criteria.MaxSequenceNr && metadata.Timestamp >= criteria.MinTimestamp.GetValueOrDefault() && metadata.Timestamp = criteria.MaxTimeStamp)
-                        |> Seq.map (fun metadata -> eventStore.DeleteStreamAsync(getStream metadata.PersistenceId metadata.SequenceNumber, ExpectedVersion.Any |> int64, userCredentials = plugin.Credentials))
-                        |> Task.Parallel
+                        |> Seq.map (fun event -> event, deserializeSnapshotMetadata event)
+                        |> Seq.filter (fun (_,metadata) -> metadata.SequenceNumber >= criteria.MinSequenceNr && metadata.SequenceNumber <= criteria.MaxSequenceNr && metadata.Timestamp >= criteria.MinTimestamp.GetValueOrDefault() && metadata.Timestamp = criteria.MaxTimeStamp)
+                        |> Seq.maxBy (fun (event,_) -> event.Event.EventNumber)
+                        |> fun (event,_) -> event.Event.EventNumber
+
+                    let! metadataResult = eventStore.GetStreamMetadataAsync(stream, plugin.Credentials)
+                    let metadata = metadataResult.StreamMetadata
+                    let newMetadata = StreamMetadata.Create(metadata.MaxCount, metadata.MaxAge, upperLimit |> Nullable, metadata.CacheControl, metadata.Acl)
+                    let! result = eventStore.SetStreamMetadataAsync(stream, metadataResult.MetastreamVersion, newMetadata, plugin.Credentials)
 
                     return! Result.successWithEvents () [DeletedSuccessfully]
                 }
             member __.DeleteAllSnapshots persistenceId sequenceNumber =
                 operation {
-                    let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(getMetadataStream persistenceId, -1L, readBatchSize, true, userCredentials = plugin.Credentials)
+                    let stream = getSnapshotStream persistenceId
+                    let! eventSlice = eventStore.ReadStreamEventsBackwardAsync(stream, -1L, readBatchSize, true, userCredentials = plugin.Credentials)
 
-                    let! result = 
+                    let upperLimit =
                         eventSlice.Events
-                        |> Seq.map deserializeSnapshotMetadata
-                        |> Seq.filter (fun snapshotMetadata -> snapshotMetadata.SequenceNumber <= sequenceNumber)
-                        |> Seq.map (fun snapshotMetadata -> eventStore.DeleteStreamAsync(getStream snapshotMetadata.PersistenceId snapshotMetadata.SequenceNumber, ExpectedVersion.Any |> int64, userCredentials = plugin.Credentials))
-                        |> Task.Parallel
+                        |> Seq.map (fun event -> event, deserializeSnapshotMetadata event)
+                        |> Seq.filter (fun (_,metadata) -> metadata.SequenceNumber <= sequenceNumber)
+                        |> Seq.maxBy (fun (event,_) -> event.Event.EventNumber)
+                        |> fun (event,_) -> event.Event.EventNumber
+
+                    let! metadataResult = eventStore.GetStreamMetadataAsync(stream, plugin.Credentials)
+                    let metadata = metadataResult.StreamMetadata
+                    let newMetadata = StreamMetadata.Create(metadata.MaxCount, metadata.MaxAge, upperLimit |> Nullable, metadata.CacheControl, metadata.Acl)
+                    let! result = eventStore.SetStreamMetadataAsync(stream, metadataResult.MetastreamVersion, newMetadata, plugin.Credentials)
 
                     return! Result.successWithEvents () [DeletedSuccessfully]
                 }

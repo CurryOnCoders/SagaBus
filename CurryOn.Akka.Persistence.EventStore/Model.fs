@@ -6,6 +6,7 @@ open System
 [<CLIMutable>]
 type EventMetadata =
     {
+        SequenceNumber: int64
         EventType: string
         Sender: IActorRef
         Tags: string []
@@ -18,4 +19,3 @@ type SnapshotMetadata =
         SequenceNumber: int64
         Timestamp: DateTime
     }
-
