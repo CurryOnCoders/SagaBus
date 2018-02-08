@@ -10,7 +10,7 @@
     <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Akka.Persistence.EventStore</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Akka.net Persistence Plug-in for EventStore.  Includes Event Journal, Snapshot Store, and Query Read Journal.</description>
-    <releaseNotes>Fixed performance bug with reconnections to EventStore.</releaseNotes>
+    <releaseNotes>Improved management of Snapshots and Snapshot metadata.</releaseNotes>
     <copyright>Copyright 2018</copyright>
     <tags>Akka Akka.net Persistence Elasticsearch Elastic Search event journal snapshot</tags>
     <dependencies>
