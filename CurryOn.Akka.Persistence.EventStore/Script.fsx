@@ -290,15 +290,3 @@ let rec readSlice startPosition ids =
 let persistenceIds = Set.empty<string> |> readSlice 0L
 for id in persistenceIds.Result do printfn "%s" id
 
-
-
-
-
-
-open Microsoft.VisualStudio.Threading
-open EventStore.ClientAPI
-
-let getConnection = 
-    let connection = EventStoreConnection.Create("")
-    let lazyConnection = new AsyncLazy<IEventStoreConnection>(fun () -> connection.ConnectAsync(); connection)
-    fun () -> laz.Value

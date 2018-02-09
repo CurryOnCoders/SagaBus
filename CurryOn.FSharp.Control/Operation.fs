@@ -2,6 +2,7 @@
 
 open FSharp.Reflection
 open System
+open System.Runtime.CompilerServices
 open System.Threading.Tasks
 
 /// Represents the successful result of an Operation that also yields events
@@ -63,6 +64,12 @@ type OperationResult<'result,'event> =
 /// to set a failed result without losing any domain events that have occurred.
  type OperationFailedException<'event>(events) =
     inherit Exception(sprintf "Operation Failed: %s" <| String.Join(",\r\n", events |> List.map (sprintf "%A")))
+    member __.Events: 'event list = events
+
+/// An exception type to be used when interoperating with C#, 
+/// to be raised when attempting to use a canceled operation
+ type OperationCancelledException<'event>(events) =
+    inherit OperationCanceledException(sprintf "Operation Cancelled: %s" <| String.Join(",\r\n", events |> List.map (sprintf "%A")))
     member __.Events: 'event list = events
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -298,6 +305,12 @@ module Result =
 /// events from one step in an operation to the next.
 type InProcessOperation<'result,'event> = Task<'result*'event list>
 
+/// An extension of INotifyCompletion to allow callers from C# to `await` an Operation
+type INotifyOperationCompletion<'result> =
+    inherit INotifyCompletion
+    abstract member IsCompleted: bool
+    abstract member GetResult: unit -> 'result
+
 /// Helper type for creating Lazy values that raise an event when they are evaluated
 type EventingLazy<'a> (lazyValue: 'a Lazy) =
     let evaluated = Event<'a>()
@@ -323,6 +336,33 @@ and [<Struct>] Operation<'result,'event> =
         | InProcess inProcess -> inProcess.Result |> snd
         | Deferred deferred -> deferred.Value.Events
         | Cancelled events -> events
+    member this.GetAwaiter () =
+        let rec getResult operation =
+            match operation with
+            | Completed result ->
+                match result with
+                | Success success -> success.Result
+                | Failure errors -> raise <| OperationFailedException(errors)
+            | InProcess inProcess -> inProcess.Result |> fst
+            | Deferred deferred -> getResult deferred.Value
+            | Cancelled events -> raise <| OperationCancelledException(events)
+        let operation = this
+        {new INotifyOperationCompletion<'result> with
+            member __.IsCompleted = 
+                match operation with
+                | Completed _ -> true
+                | Cancelled _ -> true
+                | _ -> false
+            member __.OnCompleted continuation =
+                let task = new Task(continuation)
+                match operation with
+                | Completed _ -> task.Start()
+                | InProcess inProcess -> inProcess.GetAwaiter().OnCompleted(continuation)
+                | Deferred deferred -> deferred.Evaluated |> Event.add (fun _ -> task.Start())
+                | Cancelled _ -> task.Start()
+            member __.GetResult () = 
+                getResult operation                
+        }
     override this.ToString () =
         match this with
         | Completed result -> sprintf "Operation Completed: %O" result
