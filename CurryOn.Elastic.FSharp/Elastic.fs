@@ -169,15 +169,15 @@ module internal Elastic =
 
     let internal bulkIndex<'index when 'index: not struct and 'index: equality> (client: ElasticClient) (indexRequests: CurryOn.Elastic.IndexRequest<'index> seq) =
         operation {
-            let getId (create: BulkCreateDescriptor<'index>) (document: 'index) =
+            let getId (descriptor: BulkIndexDescriptor<'index>) (document: 'index) =
                 match indexRequests |> Seq.tryFind (fun request -> request.Document = document) with
                 | Some request ->
                     match request.Id with
-                    | Some id -> create.Id(id.ToId()) :> IBulkCreateOperation<'index>
-                    | None -> create :> IBulkCreateOperation<'index>
-                | None -> create :> IBulkCreateOperation<'index>
+                    | Some id -> descriptor.Id(id.ToId()) :> IBulkIndexOperation<'index>
+                    | None -> descriptor :> IBulkIndexOperation<'index>
+                | None -> descriptor :> IBulkIndexOperation<'index>
             let getBulkOperation (descriptor: BulkDescriptor) =
-                descriptor.CreateMany(indexRequests |> Seq.map (fun request -> request.Document), fun bd index -> getId bd index) :> IBulkRequest
+                descriptor.IndexMany(indexRequests |> Seq.map (fun request -> request.Document), fun bd index -> getId bd index) :> IBulkRequest
             let! response = client.BulkAsync(fun b -> getBulkOperation b)
             return! if response.IsValid 
                     then let bulkResponse = response |> parseBulkResponse                            
@@ -187,7 +187,7 @@ module internal Elastic =
 
     let internal bulkIndexDocuments<'index when 'index: not struct> (client: ElasticClient) (documents: 'index seq) =
         operation {
-            let! response = client.BulkAsync(fun b -> b.CreateMany(documents) :> IBulkRequest)
+            let! response = client.BulkAsync(fun b -> b.IndexMany(documents) :> IBulkRequest)
             return! if response.IsValid 
                     then let bulkResponse = response |> parseBulkResponse
                          Result.successWithEvents bulkResponse [BulkDocumentsIndexed]
