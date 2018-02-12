@@ -450,6 +450,27 @@ module Operation =
     /// Map an Operation<'a,'e> into a Task<'b>
     let inline mapToTask f = map f >> toTask
 
+    /// Map an Operation<'a,'e> into an Operation<'b,'e> with separate maps for success and failure states
+    let rec mapEither<'a,'b,'e> (fSuccess: 'a -> 'b) (fFailure: 'e list -> 'b) (operation: Operation<'a,'e>) =
+        match operation with
+        | Completed result -> 
+            match result with
+            | Success success -> Result.successWithEvents (fSuccess success.Result) success.Events
+            | Failure errors -> Result.successWithEvents (fFailure errors) errors
+            |> Completed
+        | InProcess inProcess -> inProcess.ContinueWith(fun (task: Task<'a*'e list>) -> 
+            let completionSource = new TaskCompletionSource<'b*'e list>()
+            if task.IsFaulted
+            then let result = Result.ofException<'a,'e> task.Exception
+                 completionSource.SetResult (fFailure result.Events, result.Events)
+            elif task.IsCanceled
+            then completionSource.SetCanceled()
+            else let (result,events) = task.Result
+                 completionSource.SetResult (fSuccess result, events)
+            completionSource.Task).Unwrap() |> InProcess
+        | Deferred deferred -> lazy(deferred.Value |> mapEither fSuccess fFailure) |> EventingLazy |> Deferred
+        | Cancelled events -> Result.successWithEvents (fFailure events) events |> Completed
+
     /// Synchronously wait for an Operation to complete
     let rec complete operation =
         match operation with
