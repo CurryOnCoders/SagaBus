@@ -195,6 +195,7 @@ To faciliate working with Operations and OperationResults, the framework provide
 `Operation.completeAsync` can be used to force an InProcess or Deferred Operation to complete, and returns an `Async<Operation<'result,'event>>` where the Operation returned by the Async is guaranteed to be Completed.
 
 `Operation.completeTask` can be used to force an InProcess or Deferred Operation to complete, and returns a `Task<Operation<'result,'event>>` where the Task's Result is guaranteed to be a Completed Operation.
+***
 
 `Result.join` can be used to convert a sequence of `OperationResults` into a single `OperationResult` where the value is an array.
 
