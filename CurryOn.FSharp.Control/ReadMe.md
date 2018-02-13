@@ -148,7 +148,9 @@ let parseIpAddress inputString =
 When working with `Operations`, the operators typically have an additional character to differentiate them from the operators for working with `OperationResults`:
 
 `bind`:   `>>=` for OperationResults, `>>>=` for Operations
+
 `apply`:  `<*>` for OperationResults, `<**>` for Operations
+
 `lift`:   `<!>` for OperationResults, `<!!>` for Operations
 
 #### Working with Operations and OperationResults
