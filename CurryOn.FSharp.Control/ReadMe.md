@@ -105,7 +105,7 @@ type IPValidationEvent =
 | IpAddressValidated
 | InputStringWasNullOrEmpty
 | SegmentNotNumerical of string
-| SegmentOutOfRange of string
+| SegmentOutOfRange of int
 | InvalidNumberOfSegments of int
 | UnexpectedError of exn
 
@@ -122,7 +122,7 @@ let validateNumerical (s: string) =
 
 let validateRange i =
     if i < 0 || i > 255
-    then Failure [SegmentOutOfRange (i |> string)]
+    then Failure [SegmentOutOfRange i]
     else Result.success <| Convert.ToByte i
 
 let validateNumberOfSegments (s: string) =
