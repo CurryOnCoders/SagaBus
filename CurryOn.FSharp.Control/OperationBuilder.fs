@@ -467,7 +467,7 @@ module OperationBuilder =
             then bind (op |> Operation.cast<'a,'aevent,'bevent>) (fun (result,events) -> continuation result |> mergeEvents <| (events |> Seq.cast<'bevent> |> Seq.toList))
             else bindAcross op (fun (result,_) -> continuation result)
         member inline __.Bind(result : OperationResult<'a,'event>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =
-            bindResult result (fun (result,events) -> continuation result |> mergeEvents <| events)
+            bindResult result (fun (a,events) -> continuation a |> mergeEvents <| events)
         member inline __.Bind(async: 'a Async, continuation: 'a -> OperationStep<'b,'event>): OperationStep<'b,'event> =
             bindAsync async continuation
         member inline __.Bind(async: Async<OperationResult<'a,'event>>, continuation : 'a -> OperationStep<'b,'event>) : OperationStep<'b,'event> =

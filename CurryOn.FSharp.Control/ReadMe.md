@@ -97,6 +97,59 @@ let writeFile fileName contents =
 
 When used in this way, the Operation framework allows for informational messages or domain events to be propogated from one operation to another, such that calling `readFile` (with a file that exists) would return a Success with two events, FileOpenedSuccessfully and FileReadSuccessfully.  It also allows any known errors and warnings to be handled and returned from one Operation to another, terminating when a Failure is encountered without running Operations farther down the chain.  Any unforseen exceptions that may still be raised will be captured with the `UnhandledException` case.  It is recommended to include a case such as this in any discrimintaed union used for the `'event` type of an Operation, as the framework contains special logic to seek out a union case with a single field of type `exn` when an uhandled exception is thrown from an Operation.  This allows the exception to be captured and returned without changing the type of the Operation from `Operation<'result,'event>` to `Operation<'result,exn>`.  If the Operation is already of type `Operation<'result,exn>`, the unhandled exception is returned in the list of exceptions in the Failure case of the OperationResult.
 
+### Railway-Oriented Programming
+In addition to the Operation computation builder, the framework also includes the standard Railway-Oriented Programming functions and operators for working with `OperationResults` and a similar set for working with `Operations`.
+
+```fsharp
+type IPValidationEvent =
+| IpAddressValidated
+| InputStringWasNullOrEmpty
+| SegmentNotNumerical of string
+| SegmentOutOfRange of string
+| InvalidNumberOfSegments of int
+| UnexpectedError of exn
+
+let validateNotNull s =
+    if String.IsNullOrWhiteSpace s
+    then Failure [InputStringWasNullOrEmpty]
+    else Result.success s
+
+let validateNumerical (s: string) =
+    let isNumerical = s |> Seq.fold (fun acc cur -> acc && Char.IsDigit(cur)) true
+    if isNumerical
+    then Int32.Parse(s) |> Result.success
+    else Failure [SegmentNotNumerical s]
+
+let validateRange i =
+    if i < 0 || i > 255
+    then Failure [SegmentOutOfRange (i |> string)]
+    else Result.success <| Convert.ToByte i
+
+let validateNumberOfSegments (s: string) =
+    let segments = s.Split('.')
+    if segments.Length = 4
+    then Result.success segments
+    else Failure [InvalidNumberOfSegments segments.Length]
+
+let validateSegments (segments: string []) =
+    segments 
+    |> Array.map validateNumerical 
+    |> Array.map (fun n -> n >>= validateRange)
+    |> Result.join
+
+let parseIpAddress inputString =
+    inputString
+    |> validateNotNull
+    >>= validateNumberOfSegments
+    >>= validateSegments
+    >>= (fun segments -> Result.successWithEvents (Net.IPAddress segments) [IpAddressValidated])
+```
+
+When working with `Operations`, the operators typically have an additional character to differentiate them from the operators for working with `OperationResults`:
+
+`bind`:   `>>=` for OperationResults, `>>>=` for Operations
+`apply`:  `<*>` for OperationResults, `<**>` for Operations
+`lift`:   `<!>` for OperationResults, `<!!>` for Operations
 
 #### Working with Operations and OperationResults
 To faciliate working with Operations and OperationResults, the framework provides a library of functions to simplify the interpretation, evaluation, and combination of Operations and their results.  
@@ -141,6 +194,9 @@ To faciliate working with Operations and OperationResults, the framework provide
 
 `Operation.completeTask` can be used to force an InProcess or Deferred Operation to complete, and returns a `Task<Operation<'result,'event>>` where the Task's Result is guaranteed to be a Completed Operation.
 
+`Result.join` can be used to convert a sequence of `OperationResults` into a single `OperationResult` where the value is an array.
+
+`Operation.join` can be used to convert a sequence of `Operations` into a single `Operation` where the value is an array.
 
 #### Interoperability
 While the framework aims to make Operations easy to work with and combine to create larger Operations and entire programs, there may ultimately be a point where the program needs to either return a value or throw an exception, such as when interoperating with another library or with a user interface.  In this case, it is recommended to use the `Operation.returnOrFail` function to force evaluation of the Operation and either return the value of the successful result, or throw an exception with the failure events.

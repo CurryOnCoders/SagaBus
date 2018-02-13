@@ -77,13 +77,13 @@ module Result =
     type UnionCaseInfo with member this.Fields = this.GetFields()
 
     /// Creates a successful OperationResult with the given value
-    let success<'result, 'event> : 'result -> OperationResult<'result,'event> = fun value -> value |> Value |> Success
+    let inline success<'result, 'event> : 'result -> OperationResult<'result,'event> = fun value -> value |> Value |> Success
 
     /// Creates a successful OperationResult with the given value and events
-    let successWithEvents value events = {Value = value; Events = events} |> WithEvents |> Success
+    let inline successWithEvents value events = {Value = value; Events = events} |> WithEvents |> Success
 
     /// Creates a failed OperationResult with the given error events
-    let failure<'result,'event> : 'event list -> OperationResult<'result,'event> = fun events -> events |> Failure
+    let inline failure<'result,'event> : 'event list -> OperationResult<'result,'event> = fun events -> events |> Failure
 
     /// Unwraps an AggregateException if there is only 1 inner exception
     let unwrapAggregateException (aggregate: AggregateException) =
@@ -181,12 +181,7 @@ module Result =
 
     /// Flattens a nested OperationResult given the Failure types are equal
     let inline flatten (result : OperationResult<OperationResult<_,_>,_>) =
-        result |> bind id
-
-    /// If the OperationResult is a Success it executes the given function on the value. 
-    /// Otherwise the exisiting failure is propagated.
-    /// This is the infix operator version of the bind function
-    let inline (>>=) result f = bind f result
+        result |> bind id    
 
     /// If the wrapped function is a success and the given result is a success the function is applied on the value. 
     /// Otherwise the exisiting error events are propagated.
@@ -197,11 +192,6 @@ module Result =
         | Success _, Failure errors -> Failure errors
         | Failure errors1, Failure errors2 -> Failure <| errors1 @ errors2
 
-    /// If the wrapped function is a success and the given result is a success the function is applied on the value. 
-    /// Otherwise the exisiting error messages are propagated.
-    /// This is the infix operator version of the apply function
-    let inline (<*>) wrappedFunction result = apply wrappedFunction result
-
     /// Lifts a function into an OperationResult container and applies it on the given result.
     let inline lift f result = apply (Success <| Value f) result
 
@@ -210,13 +200,6 @@ module Result =
         match result with
         | Success successfulResult -> Success (Value successfulResult.Result)
         | Failure errors -> Failure <| f errors
-
-    /// Lifts a function into a Result and applies it on the given result.
-    /// This is the infix operator version of the lift function
-    let inline (<!>) f result = lift f result
-
-    /// Promote a function to a monad/applicative, scanning the monadic/applicative arguments from left to right.
-    let inline lift2 f a b = f <!> a <*> b
 
     /// If the OperationResult is a Success it executes the given success function on the value and the events.
     /// If the OperationResult is a Failure it executes the given failure function on the events.
@@ -299,6 +282,48 @@ module Result =
         match result with
         | Success success -> successWithEvents (success.Result |> f) success.Events
         | Failure errors -> failure errors
+
+    /// Combine a sequence of Results into a single result of an array type
+    let inline join (results: OperationResult<'result,'event> seq) =
+        results |> Seq.fold (fun acc cur ->
+            match acc with
+            | Success s1 ->
+                match cur with
+                | Success s2 -> 
+                    match s1 with
+                    | Value v1 -> 
+                        match s2 with
+                        | Value v2 -> success <| v2::v1
+                        | WithEvents we2 -> successWithEvents (we2.Value::v1) we2.Events
+                    | WithEvents we1 ->
+                        match s2 with
+                        | Value v2 -> successWithEvents (v2::we1.Value) we1.Events
+                        | WithEvents we2 -> successWithEvents (we2.Value::we1.Value) (we1.Events @ we2.Events)
+                | Failure e2 -> Failure (s1.Events @ e2)
+            | Failure e1 -> Failure (e1 @ cur.Events)) (success [])
+            |> lift Seq.rev
+            |> lift Seq.toArray
+                
+
+[<AutoOpen>]
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ResultOperators =
+    /// If the OperationResult is a Success it executes the given function on the value. 
+    /// Otherwise the exisiting failure is propagated.
+    /// This is the infix operator version of the bind function
+    let inline (>>=) result f = Result.bind f result
+
+    /// If the wrapped function is a success and the given result is a success the function is applied on the value. 
+    /// Otherwise the exisiting error messages are propagated.
+    /// This is the infix operator version of the apply function
+    let inline (<*>) wrappedFunction result = Result.apply wrappedFunction result
+
+    /// Lifts a function into a Result and applies it on the given result.
+    /// This is the infix operator version of the lift function
+    let inline (<!>) f result = Result.lift f result
+
+    /// Promote a function to a monad/applicative, scanning the monadic/applicative arguments from left to right.
+    let inline lift2 f a b = f <!> a <*> b
 
 /// A specific case of System.Threading.Tasks.Task<'t> which carries a list of events
 /// along with the result of the task, to enable asynchronous operations to propogate
@@ -556,6 +581,131 @@ module Operation =
         | Cancelled events -> events |> Failure
         |> Result.returnOrFail 
 
+    /// If the Operation completes successfully, the given function will be executed on the value.
+    /// Otherwise the exisiting failure is propagated.
+    let rec bind<'a,'b,'e> (f: 'a -> 'b) (operation: Operation<'a,'e>) = 
+        match operation with
+        | Completed result -> 
+            match result with
+            | Success success -> 
+                match success with
+                | Value value -> Result.success (f value)
+                | WithEvents withEvents -> Result.successWithEvents (f withEvents.Value) withEvents.Events
+            | Failure events -> Failure events
+            |> Completed
+        | InProcess inProcess -> 
+            inProcess.ContinueWith(fun (task: Task<'a*'e list>) -> 
+                let completionSource = new TaskCompletionSource<'b*'e list>()
+                if task.IsFaulted
+                then completionSource.SetException(task.Exception)
+                elif task.IsCanceled
+                then completionSource.SetCanceled()
+                else let (value, events) = task.Result
+                     completionSource.SetResult((f value, events))
+                completionSource.Task).Unwrap() |> InProcess
+        | Deferred deferred -> EventingLazy (lazy(deferred.Value |> bind f)) |> Deferred
+        | Cancelled events -> Cancelled events
+
+    /// Flattens a nested Operation given the Event types are equal
+    let inline flatten (result : Operation<Operation<_,_>,_>) =
+        result |> bind id
+
+    /// If the wrapped function completes successfully and the given operation also completes successfully, the function is applied on the value. 
+    /// Otherwise the exisiting error events are propagated.
+    let rec apply<'a,'b,'e> (wrappedFunction: Operation<('a -> 'b), 'e>) (operation: Operation<'a,'e>) = 
+        match operation with
+        | Completed result ->
+            match result with
+            | Success success ->
+                match success with
+                | Value value -> 
+                    match wrappedFunction with
+                    | Completed r1 ->
+                        match r1 with
+                        | Success s1 ->
+                            match s1 with
+                            | Value f -> Result.success (f value) |> Completed
+                            | WithEvents we1 -> Result.successWithEvents (we1.Value value) we1.Events |> Completed
+                        | Failure ev1s -> Failure ev1s |> Completed
+                    | InProcess inp1 ->
+                        inp1.ContinueWith(fun (t1: Task<('a->'b)*'e list>) ->
+                            let completionSource = new TaskCompletionSource<'b*'e list>()
+                            if t1.IsFaulted
+                            then completionSource.SetException(t1.Exception)
+                            elif t1.IsCanceled
+                            then completionSource.SetCanceled()
+                            else let (f,ev1s) = t1.Result
+                                 completionSource.SetResult((f value), ev1s)
+                            completionSource.Task).Unwrap() |> InProcess
+                    | Deferred d1 -> EventingLazy(lazy(apply d1.Value operation)) |> Deferred
+                    | Cancelled ev1s -> Cancelled ev1s
+                | WithEvents withEvents ->
+                    match wrappedFunction with
+                    | Completed r1 ->
+                        match r1 with
+                        | Success s1 ->
+                            match s1 with
+                            | Value f -> Result.successWithEvents (f withEvents.Value) withEvents.Events |> Completed
+                            | WithEvents we1 -> Result.successWithEvents (we1.Value withEvents.Value) (withEvents.Events @ we1.Events) |> Completed
+                        | Failure ev1s -> Failure (withEvents.Events @ ev1s) |> Completed
+                    | InProcess inp1 ->
+                        inp1.ContinueWith(fun (t1: Task<('a->'b)*'e list>) ->
+                            let completionSource = new TaskCompletionSource<'b*'e list>()
+                            if t1.IsFaulted
+                            then completionSource.SetException(t1.Exception)
+                            elif t1.IsCanceled
+                            then completionSource.SetCanceled()
+                            else let (f,ev1s) = t1.Result
+                                 completionSource.SetResult((f withEvents.Value), (withEvents.Events @ ev1s))
+                            completionSource.Task).Unwrap() |> InProcess
+                    | Deferred d1 -> EventingLazy(lazy(apply d1.Value operation)) |> Deferred
+                    | Cancelled ev1s -> Cancelled (withEvents.Events @ ev1s)
+            | Failure events ->
+                match wrappedFunction with
+                | Completed r1 ->
+                    match r1 with
+                    | Success s1 -> Failure (events @ s1.Events) |> Completed
+                    | Failure ev1s -> Failure (events @ ev1s) |> Completed
+                | InProcess inp1 ->
+                    inp1.ContinueWith(fun (t1: Task<('a->'b)*'e list>) ->
+                        let completionSource = new TaskCompletionSource<'b*'e list>()
+                        completionSource.SetException(OperationFailedException(events))
+                        completionSource.Task).Unwrap() |> InProcess
+                | Deferred d1 -> EventingLazy(lazy(apply d1.Value operation)) |> Deferred
+                | Cancelled ev1s -> Cancelled (events @ ev1s)
+        | InProcess inProcess -> 
+            inProcess.ContinueWith(fun (task: Task<'a*'e list>) ->
+                let completionSource = new TaskCompletionSource<'b*'e list>()
+                if task.IsFaulted
+                then completionSource.SetException(task.Exception)
+                elif task.IsCanceled
+                then completionSource.SetCanceled()
+                else let (value, events) = task.Result
+                     match wrappedFunction with
+                     | Completed r1 ->
+                         match r1 with
+                         | Success s1 ->
+                             match s1 with
+                             | Value f -> completionSource.SetResult(f value, events)
+                             | WithEvents we1 -> completionSource.SetResult(we1.Value value, events @ we1.Events)
+                         | Failure ev1s -> completionSource.SetException(new OperationFailedException<'e>(events @ ev1s))
+                     | InProcess inp1 ->
+                         inp1.ContinueWith(fun (t1: Task<('a->'b)*'e list>) ->
+                             if t1.IsFaulted
+                             then completionSource.SetException(t1.Exception)
+                             elif t1.IsCanceled
+                             then completionSource.SetCanceled()
+                             else let (f,ev1s) = t1.Result
+                                  completionSource.SetResult((f value), events @ ev1s)).Wait()
+                     | Deferred d1 -> completionSource.SetCanceled()
+                     | Cancelled ev1s -> completionSource.SetCanceled()
+                completionSource.Task).Unwrap() |> InProcess
+        | Deferred deferred -> EventingLazy(lazy(apply wrappedFunction deferred.Value)) |> Deferred
+        | Cancelled events -> Cancelled events
+
+    /// Lifts a function into an Operation container and applies it to the given other Operation.
+    let inline lift f operation = apply (Completed (Success <| Value f)) operation
+
     /// Executes multiple Operations in parallel and asynchronously returns an array of the results
     /// Note:  The identifier 'parallel' is reserved by F# for future usage,
     ///        so this function's name must be uppercase
@@ -610,3 +760,151 @@ module Operation =
             | Cancelled events -> Cancelled (events |> Seq.cast<'bevent> |> Seq.toList)
             | Deferred deferred -> Deferred (EventingLazy(lazy(deferred.Value |> exec)))
         exec operation
+
+    /// Combine a sequence of Operations into a single Operation of an array type
+    let inline join (operations: Operation<'result,'event> seq) =
+        operations |> Seq.fold (fun acc cur ->
+            match acc with
+            | Completed r1 ->
+                match r1 with
+                | Success s1 ->                    
+                    match cur with
+                    | Completed r2 -> 
+                        match r2 with
+                        | Success s2 -> 
+                            match s1 with
+                            | Value v1 -> 
+                                match s2 with
+                                | Value v2 -> Result.success <| v2::v1
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::v1) we2.Events
+                            | WithEvents we1 ->
+                                match s2 with
+                                | Value v2 -> Result.successWithEvents (v2::we1.Value) we1.Events
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::we1.Value) (we1.Events @ we2.Events)
+                        | Failure e2 -> Failure (s1.Events @ e2)
+                        |> Completed
+                    | InProcess ip2 ->
+                        ip2.ContinueWith(fun (t2: Task<'result*'event list>) ->
+                            let cs2 = new TaskCompletionSource<'result list*'event list>()
+                            if t2.IsFaulted
+                            then cs2.SetException t2.Exception
+                            elif t2.IsCanceled
+                            then cs2.SetCanceled()
+                            else let (v2, e2) = t2.Result
+                                 cs2.SetResult(v2::s1.Result, s1.Events @ e2)
+                            cs2.Task).Unwrap() |> InProcess
+                    | Deferred d2 -> 
+                        match d2.Value |> wait with
+                        | Success s2 -> 
+                            match s1 with
+                            | Value v1 -> 
+                                match s2 with
+                                | Value v2 -> Result.success <| v2::v1
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::v1) we2.Events
+                            | WithEvents we1 ->
+                                match s2 with
+                                | Value v2 -> Result.successWithEvents (v2::we1.Value) we1.Events
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::we1.Value) (we1.Events @ we2.Events)
+                        | Failure e2 -> Failure (s1.Events @ e2)
+                        |> Completed
+                    | Cancelled e2 -> Cancelled (r1.Events @ e2)
+                | Failure e1 -> Failure (e1 @ cur.Events) |> Completed
+            | InProcess ip1 ->
+                ip1.ContinueWith(fun (t1: Task<'result list*'event list>) ->
+                    let cs1 = new TaskCompletionSource<'result list*'event list>()
+                    if t1.IsFaulted
+                    then cs1.SetException(t1.Exception)
+                    elif t1.IsCanceled
+                    then cs1.SetCanceled()
+                    else let (r1, e1) = t1.Result
+                         match cur with
+                         | Completed r2 ->
+                            match r2 with
+                            | Success s2 -> cs1.SetResult(s2.Result::r1, e1@s2.Events)                                
+                            | Failure e2 -> cs1.SetException(OperationFailedException(e2))
+                         | InProcess ip2 -> 
+                            ip2.ContinueWith(fun (t2: Task<'result*'event list>) ->
+                                if t2.IsFaulted
+                                then cs1.SetException t2.Exception
+                                elif t2.IsCanceled
+                                then cs1.SetCanceled()
+                                else let (v2, e2) = t2.Result
+                                     cs1.SetResult(v2::r1, e1 @ e2)
+                                t2).Wait()
+                         | Deferred d2 -> 
+                            match d2.Value |> wait with
+                            | Success s2 -> 
+                                match s2 with
+                                | Value v2 -> cs1.SetResult(v2::r1, e1)
+                                | WithEvents we2 -> cs1.SetResult(we2.Value::r1, e1 @ we2.Events)
+                            | Failure e2 -> cs1.SetException (OperationFailedException(e1 @ e2))
+                         | Cancelled e2 -> cs1.SetCanceled()
+                    cs1.Task).Unwrap() |> InProcess
+            | Deferred d1 ->
+                match d1.Value |> wait with
+                | Success s1 ->                    
+                    match cur with
+                    | Completed r2 -> 
+                        match r2 with
+                        | Success s2 -> 
+                            match s1 with
+                            | Value v1 -> 
+                                match s2 with
+                                | Value v2 -> Result.success <| v2::v1
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::v1) we2.Events
+                            | WithEvents we1 ->
+                                match s2 with
+                                | Value v2 -> Result.successWithEvents (v2::we1.Value) we1.Events
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::we1.Value) (we1.Events @ we2.Events)
+                        | Failure e2 -> Failure (s1.Events @ e2)
+                        |> Completed
+                    | InProcess ip2 ->
+                        ip2.ContinueWith(fun (t2: Task<'result*'event list>) ->
+                            let cs2 = new TaskCompletionSource<'result list*'event list>()
+                            if t2.IsFaulted
+                            then cs2.SetException t2.Exception
+                            elif t2.IsCanceled
+                            then cs2.SetCanceled()
+                            else let (v2, e2) = t2.Result
+                                 cs2.SetResult(v2::s1.Result, s1.Events @ e2)
+                            cs2.Task).Unwrap() |> InProcess
+                    | Deferred d2 -> 
+                        match d2.Value |> wait with
+                        | Success s2 -> 
+                            match s1 with
+                            | Value v1 -> 
+                                match s2 with
+                                | Value v2 -> Result.success <| v2::v1
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::v1) we2.Events
+                            | WithEvents we1 ->
+                                match s2 with
+                                | Value v2 -> Result.successWithEvents (v2::we1.Value) we1.Events
+                                | WithEvents we2 -> Result.successWithEvents (we2.Value::we1.Value) (we1.Events @ we2.Events)
+                        | Failure e2 -> Failure (s1.Events @ e2)
+                        |> Completed
+                    | Cancelled e2 -> Cancelled (d1.Value.Events @ e2)
+                | Failure e1 -> Failure (e1 @ cur.Events) |> Completed
+            | Cancelled e1 -> Cancelled (e1 @ cur.Events)) (Completed <| Result.success [])
+            |> lift Seq.rev
+            |> lift Seq.toArray
+        
+
+[<AutoOpen>]
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module OperationOperators =
+    /// If the Operation completes successfully, the given function will be executed on the value.
+    /// Otherwise the exisiting failure is propagated.
+    /// This is the infix operator version of the bind function
+    let inline (>>>=) operation f = Operation.bind f operation
+
+    /// If the wrapped function completes successfully and the given operation also completes successfully, the function is applied on the value. 
+    /// Otherwise the exisiting error events are propagated.
+    /// This is the infix operator version of the apply function
+    let inline (<**>) wrappedFunction operation = Operation.apply wrappedFunction operation
+
+    /// Lifts a function into an Operation and applies it to the given other Operation.
+    /// This is the infix operator version of the lift function
+    let inline (<!!>) f operation = Operation.lift f operation
+
+    /// Promote a function to a monad/applicative, scanning the monadic/applicative arguments from left to right.
+    let inline lift2Op f a b = f <!!> a <**> b

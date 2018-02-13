@@ -344,3 +344,4 @@ let opB =
         let! x = opA
         return! Result.successWithEvents (x * 2) [B]
     }
+
