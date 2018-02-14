@@ -156,6 +156,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CurryOn.Akka.Persistence.Common\CurryOn.Akka.Persistence.Common.fsproj">
+      <Name>CurryOn.Akka.Persistence.Common</Name>
+      <Project>{b502bb9d-6954-476a-b7bd-8900d78a73fe}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\CurryOn.Akka.Persistence.Elasticsearch\CurryOn.Akka.Persistence.Elasticsearch.fsproj">
       <Name>CurryOn.Akka.Persistence.Elasticsearch</Name>
       <Project>{6c1347d5-7edb-4df1-8aaa-63cd3a7133f3}</Project>
@@ -164,6 +169,11 @@
     <ProjectReference Include="..\CurryOn.Akka.Persistence.EventStore\CurryOn.Akka.Persistence.EventStore.fsproj">
       <Name>CurryOn.Akka.Persistence.EventStore</Name>
       <Project>{afacf2db-d3a6-4e72-a408-648bd6bfc0ab}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\CurryOn.Akka.Persistence.Indexed\CurryOn.Akka.Persistence.Indexed.fsproj">
+      <Name>CurryOn.Akka.Persistence.Indexed</Name>
+      <Project>{3ad73d03-2f2f-410c-9f7b-c0bfd6d4f886}</Project>
       <Private>True</Private>
     </ProjectReference>
     <ProjectReference Include="..\CurryOn.Akka.Persistence.Streaming\CurryOn.Akka.Persistence.Streaming.fsproj">
