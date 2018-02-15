@@ -56,6 +56,7 @@
     <None Include="ReadMe.md" />
     <None Include="Script.fsx" />
     <None Include="ParseIpDemo.fsx" />
+    <None Include="UserRegistrationDemo.fsx" />
     <Content Include="packages.config" />
     <None Include="CurryOn.FSharp.Control.nuspec" />
   </ItemGroup>
