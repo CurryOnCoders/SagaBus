@@ -169,9 +169,9 @@ registerUser
     {DesiredUserName = "AaronE"; 
      DesiredPassword = "i like to type lots of characters"; 
      FirstName = "Aaron"; LastName = "Eshbach"; 
-     EmailAddress = "aeshbach@dandh.com"; 
-     PhoneNumber = "717-236-8001"; 
-     DateOfBirth = DateTime.Parse("8/6/1986")}
+     EmailAddress = "aeshbach@sample.com"; 
+     PhoneNumber = "555-236-8001"; 
+     DateOfBirth = DateTime.Parse("12/31/1986")}
      |> Operation.wait
 
 
@@ -179,8 +179,8 @@ registerUser
     {DesiredUserName = "APalmer"; 
      DesiredPassword = "S3asoned Wh1tebo4rd"; 
      FirstName = "Aaron"; LastName = "Palmer"; 
-     EmailAddress = "apalmer@dandh.com"; 
-     PhoneNumber = "717-236-8001"; 
+     EmailAddress = "apalmer@sample.com"; 
+     PhoneNumber = "555-236-8001"; 
      DateOfBirth = DateTime.Parse("6/4/1944")}
      |> Operation.wait
 
@@ -188,8 +188,8 @@ registerUser
     {DesiredUserName = "Already Exists"; 
      DesiredPassword = "f23890 qsSGdyt9"; 
      FirstName = "Already"; LastName = "Exists"; 
-     EmailAddress = "aexists@dandh.com"; 
-     PhoneNumber = "717-236-8001"; 
+     EmailAddress = "aexists@sample.com"; 
+     PhoneNumber = "555-236-8001"; 
      DateOfBirth = DateTime.Parse("1/1/1980")}
      |> Operation.wait
 
@@ -197,7 +197,7 @@ registerUser
     {DesiredUserName = "c00lM4n"; 
      DesiredPassword = "1'M t3h b3st!"; 
      FirstName = "Leet"; LastName = "Haxor"; 
-     EmailAddress = "fake@dandh.com"; 
+     EmailAddress = "fake@sample.com"; 
      PhoneNumber = "555-123-4567"; 
      DateOfBirth = DateTime.Parse("5/21/2003")}
      |> Operation.wait
