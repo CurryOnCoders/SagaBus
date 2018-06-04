@@ -56,7 +56,7 @@
     <Compile Include="ConcurrentQueue.fs" />
     <Compile Include="ConcurrentStack.fs" />
     <None Include="Script.fsx" />
-    <Content Include="FSharp.Collections.Concurrent.xml" />
+    <None Include="FSharp.Collections.Concurrent.nuspec" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
