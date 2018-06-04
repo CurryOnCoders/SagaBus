@@ -1,0 +1,20 @@
+﻿<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>CurryOn.FSharp.Collections.Concurrent</id>
+    <version>0.1.0</version>
+    <title>FSharp.Collections.Concurrent</title>
+    <authors>CurryOn Coders</authors>
+    <owners>CurryOn Coders</owners>
+    <licenseUrl>https://github.com/CurryOnCoders/CurryOn/blob/master/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.Common</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>F# idiomatic modules for the types in System.Collections.Concurrent</description>
+    <releaseNotes>Initial Release</releaseNotes>
+    <copyright>Copyright 2018</copyright>
+    <tags>CurryOn F# FSharp Concurrent Collections</tags>
+    <dependencies>
+      <dependency id="System.ValueTuple" version="4.3.0" />
+    </dependencies>
+  </metadata>
+</package>
