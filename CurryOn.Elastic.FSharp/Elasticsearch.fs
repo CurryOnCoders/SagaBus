@@ -48,15 +48,18 @@ module Elasticsearch =
                 failwithf "Unsupported Type %s (TypeCode = %A) in Greater-Than Expression" expressions.Head.Type.Name other
         | _ -> failwith "Expression was not a Lambda or a Known Specific Call"
         
+    let internal getClient (settings: ElasticSettings) =
+        let connectionSettings = settings.GetConnectionSettings()
+        ElasticClient(connectionSettings)
     
     /// Connects to the specified Elasticsearch Instance with the given settings and returns an IElasticClient
-    let connect (settings: ElasticSettings) =
-        let connectionSettings = settings.GetConnectionSettings()
-        let client = ElasticClient(connectionSettings)
+    let connect settings =
+        let client = getClient settings
         { new CurryOn.Elastic.IElasticClient with
             member __.IndexExists<'index when 'index: not struct> () = Elastic.indexExists<'index> client
             member __.CreateIndex<'index when 'index: not struct> () = Elastic.createIndex<'index> client None
             member __.CreateIndex<'index when 'index: not struct> creationRequest = Elastic.createIndex<'index> client <| Some creationRequest
+            member __.CreateIndexIfNotExists<'index when 'index: not struct> () = Elastic.createIndexIfNotExists<'index> client None
             member __.DeleteIndex<'index when 'index: not struct> () = Elastic.deleteIndex<'index> client
             member __.RecreateIndex<'index when 'index: not struct> () = Elastic.recreateIndex<'index> client
             member __.DeleteOldDocuments<'index when 'index: not struct> date = Elastic.deleteOldDocuments<'index> client date
@@ -71,7 +74,7 @@ module Elasticsearch =
             member __.Count<'index when 'index: not struct> () = Elastic.count<'index> client
             member __.Distinct<'index,'field when 'index: not struct> request = Elastic.distinctValues<'index,'field> client request
             member __.Dispose () =
-                (connectionSettings :> IDisposable).Dispose()
+                client.ConnectionSettings.Dispose()
         }
         
     /// Checks to see if an index for the given type already exists in Elasticsearch

@@ -661,6 +661,7 @@ type ElasticsearchEvent =
     | IndexDoesNotExist
     | IndexExistsFailed of ElasticError
     | IndexDeletionFailed of ElasticError
+    | InternalElasticsearchError of ElasticError
     | DocumentIndexed
     | DocumentAlreadyIndexed
     | IndexingFailed of ElasticError
@@ -715,6 +716,8 @@ type IElasticClient =
     abstract member CreateIndex<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
     /// Creates an index for the given type with the specified parameters in the Elasticsearch repository
     abstract member CreateIndex<'index when 'index: not struct> : CreateIndexRequest<'index> -> Operation<unit, ElasticsearchEvent>
+    /// Creates an index for the given type in the Elasticsearch repository only if it does not already exist
+    abstract member CreateIndexIfNotExists<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
     /// Deletes the the index for the given type and all documents contained therein from Elasticsearch
     abstract member DeleteIndex<'index when 'index: not struct> : unit -> Operation<unit, ElasticsearchEvent>
     /// Deletes and Recreates the index for the given type in Elasticsearch

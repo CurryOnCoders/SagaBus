@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Common.fs" />
+    <Compile Include="ElasticsearchTests.fs" />
     <Compile Include="AkkaPersistenceDomain.fs" />
     <Compile Include="EventStorePersistenceTests.fs" />
     <Compile Include="ElasticsearchPersistenceTests.fs" />

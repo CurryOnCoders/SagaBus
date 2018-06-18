@@ -5,14 +5,15 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>ef3be7ff-1fb2-43ed-a24b-b6368392a1ff</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <RootNamespace>CurryOn.Elastic.FSharp</RootNamespace>
-    <AssemblyName>CurryOn.Elastic.FSharp</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <ProjectGuid>0179453e-be5c-4607-8fd0-cfedf05aacd3</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>CurryOn.Elastic.FSharp.Test</RootNamespace>
+    <AssemblyName>CurryOn.Elastic.FSharp.Test</AssemblyName>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <TargetFSharpCoreVersion>4.4.1.0</TargetFSharpCoreVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Name>CurryOn.Elastic.FSharp</Name>
+    <Name>CurryOn.Elastic.FSharp.Test</Name>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -50,39 +51,45 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <Compile Include="ProvidedTypes/AssemblyReader.fs" />
-    <Compile Include="ProvidedTypes/AssemblyReaderReflection.fs" />
-    <Compile Include="ProvidedTypes/ProvidedTypes.fsi" />
-    <Compile Include="ProvidedTypes/ProvidedTypes.fs" />
-    <Compile Include="ProvidedTypes/ProvidedTypesContext.fs" />
-    <Compile Include="ProvidedTypes/ProvidedTypesTesting.fs" />
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Common.fs" />
-    <Compile Include="Attributes.fs" />
-    <Compile Include="Model.fs" />
-    <Compile Include="Elastic.fs" />
-    <Compile Include="Search.fs" />
-    <Compile Include="Elasticsearch.fs" />
-    <Compile Include="SearchProvider.fs" />
-    <Compile Include="SearchBuilder.fs" />
-    <None Include="ReadMe.md" />
+    <Compile Include="DslTests.fs" />
+    <Compile Include="Main.fs" />
     <None Include="Script.fsx" />
     <Content Include="packages.config" />
-    <None Include="CurryOn.Elastic.FSharp.nuspec" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="Argu">
+      <HintPath>..\packages\Argu.5.1.0\lib\net45\Argu.dll</HintPath>
+    </Reference>
     <Reference Include="Elasticsearch.Net">
       <HintPath>..\packages\Elasticsearch.Net.5.6.0\lib\net46\Elasticsearch.Net.dll</HintPath>
     </Reference>
-    <Reference Include="FSharp.Quotations.Evaluator">
-      <HintPath>..\packages\FSharp.Quotations.Evaluator.1.0.7\lib\net40\FSharp.Quotations.Evaluator.dll</HintPath>
+    <Reference Include="Expecto">
+      <HintPath>..\packages\Expecto.8.1.1\lib\net461\Expecto.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.Core">
+      <HintPath>..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Microsoft.TestPlatform.CoreUtilities">
+      <HintPath>..\packages\Microsoft.TestPlatform.ObjectModel.15.0.0\lib\net46\Microsoft.TestPlatform.CoreUtilities.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.TestPlatform.ObjectModel">
+      <HintPath>..\packages\Microsoft.TestPlatform.ObjectModel.15.0.0\lib\net46\Microsoft.VisualStudio.TestPlatform.ObjectModel.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>..\packages\Mono.Cecil.0.10.0\lib\net40\Mono.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil.Mdb">
+      <HintPath>..\packages\Mono.Cecil.0.10.0\lib\net40\Mono.Cecil.Mdb.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil.Pdb">
+      <HintPath>..\packages\Mono.Cecil.0.10.0\lib\net40\Mono.Cecil.Pdb.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil.Rocks">
+      <HintPath>..\packages\Mono.Cecil.0.10.0\lib\net40\Mono.Cecil.Rocks.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
-    <Reference Include="FSharp.Core">
-      <Name>FSharp.Core</Name>
-      <AssemblyName>FSharp.Core.dll</AssemblyName>
-      <HintPath>$(MSBuildProgramFiles32)\Reference Assemblies\Microsoft\FSharp\.NETFramework\v4.0\$(TargetFSharpCoreVersion)\FSharp.Core.dll</HintPath>
-    </Reference>
     <Reference Include="Nest">
       <HintPath>..\packages\NEST.5.6.0\lib\net46\Nest.dll</HintPath>
     </Reference>
@@ -90,13 +97,27 @@
       <HintPath>..\packages\Newtonsoft.Json.10.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Runtime" />
+    <Reference Include="System.Runtime.InteropServices.RuntimeInformation">
+      <HintPath>..\packages\System.Runtime.InteropServices.RuntimeInformation.4.0.0\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ValueTuple">
       <HintPath>..\packages\System.ValueTuple.4.3.0\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
+      <Private>True</Private>
     </Reference>
+    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\CurryOn.Elastic.FSharp\CurryOn.Elastic.FSharp.fsproj">
+      <Name>CurryOn.Elastic.FSharp</Name>
+      <Project>{ef3be7ff-1fb2-43ed-a24b-b6368392a1ff}</Project>
+      <Private>True</Private>
+    </ProjectReference>
     <ProjectReference Include="..\CurryOn.FSharp.Control\CurryOn.FSharp.Control.fsproj">
       <Name>CurryOn.FSharp.Control</Name>
       <Project>{b8b2e096-c261-45fc-bfba-0cea330d6b04}</Project>

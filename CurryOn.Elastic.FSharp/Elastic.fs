@@ -85,6 +85,22 @@ module internal Elastic =
             |> int
         flags |> Seq.fold (fun acc cur -> ((acc |> int) &&& (getFlag cur)) |> enum<SimpleQueryStringFlags>) (0 |> enum<SimpleQueryStringFlags>)
 
+    let internal getIndices (client: ElasticClient) =
+        operation {
+            let! response = client.GetIndexAsync(Indices.All)
+            return! if response.IsValid
+                    then Result.success response.Indices.Keys
+                    else Result.failure [response |> toError |> InternalElasticsearchError] 
+        }
+
+    let internal getMappings (client: ElasticClient) =
+        operation {
+            let! response = client.GetMappingAsync(fun mapping -> mapping.AllIndices() :> IGetMappingRequest)
+            return! if response.IsValid
+                    then Result.success (response.Mappings |> Seq.map (fun index -> index.Key, index.Value |> Seq.map (fun kvp -> kvp.Key, kvp.Value) |> Map.ofSeq) |> Map.ofSeq)
+                    else Result.failure [response |> toError |> InternalElasticsearchError] 
+        }
+
     let internal indexExists<'index when 'index: not struct> (client: ElasticClient) : Operation<bool,ElasticsearchEvent> =
         operation {
             let index = indices<'index>
@@ -110,7 +126,22 @@ module internal Elastic =
                  return! if response.IsValid
                          then Result.successWithEvents () [IndexCreated]
                          else Result.failure [response |> toError |> IndexCreationFailed]
-        }        
+        }    
+        
+    let internal createIndexIfNotExists<'index when 'index: not struct> (client: ElasticClient) (details: CreateIndexRequest<'index> option) =
+        operation {
+            let index = indexName<'index>
+            let! indexAlreadyExists = indexExists<'index> client
+            if indexAlreadyExists
+            then return! Result.successWithEvents () [IndexAlreadyExists]
+            else let! response =
+                     match details with
+                     | Some settings -> client.CreateIndexAsync(index, toCreateIndexRequest settings)
+                     | None -> client.CreateIndexAsync(index)
+                 return! if response.IsValid
+                         then Result.successWithEvents () [IndexCreated]
+                         else Result.failure [response |> toError |> IndexCreationFailed]
+        }    
 
     let internal deleteIndex<'index when 'index: not struct> (client: ElasticClient) =
         operation {

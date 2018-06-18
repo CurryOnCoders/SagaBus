@@ -24,13 +24,6 @@ module Extensions =
             then Some item.Value
             else None
 
-    let private replace (oldValue: String) newValue (str: String) =
-        str.Replace(oldValue, newValue)
-
-    type String with
-        static member Replace oldValue newValue str =
-            str |> replace oldValue newValue
-
     type DateTime with
         member this.ToExpiryDate formatString =
             sprintf formatString this.Month this.Year
@@ -77,8 +70,9 @@ module Extensions =
 
 module String =
     let uppercase (s: string) = s.ToUpper()
-    let lowercase (s: string) = s.ToLower()
-    let replace find repl (s: string) = s |> String.Replace find repl 
+    let lowercase (s: string) = s.ToLower()    
+    let replace (oldValue: String) newValue (str: String) =
+        str.Replace(oldValue, newValue)
 
 
 module Unchecked =

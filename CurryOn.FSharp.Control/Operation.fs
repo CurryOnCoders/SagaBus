@@ -456,6 +456,82 @@ module Operation =
                 | Failure errors -> OperationFailedException(errors) |> completionSource.SetException
                 completionSource.Task).Unwrap()
 
+    /// Merges the given events into the existing operation
+    let rec mergeEvents operation events =
+        match operation with
+        | Completed result -> Completed <| Result.mergeEvents result events
+        | InProcess inProcess -> 
+            inProcess.ContinueWith(fun (task: Task<_*_>) ->
+                if not (task.IsFaulted || task.IsCanceled)
+                then let result,taskEvents = task.Result
+                     Task.FromResult(result, (taskEvents @ events))
+                else task).Unwrap() |> InProcess
+        | Deferred deferred -> lazy(mergeEvents deferred.Value events) |> defer
+        | Cancelled eventsSoFar -> events @ eventsSoFar |> Cancelled
+
+    /// Unwrap an Operation<Operation<'a, 'e>> into an Operation<'a, 'e>, similar to Task.Unwrap
+    let rec unwrap<'a,'e> (operation: Operation<Operation<'a, 'e>, 'e>) =
+        match operation with
+        | Completed result -> 
+            match result with
+            | Success success -> 
+                match success with
+                | Value value -> value
+                | WithEvents withEvents -> withEvents.Events |> mergeEvents withEvents.Value
+            | Failure events -> Failure events |> Completed
+        | InProcess inProcess ->
+            inProcess.ContinueWith(fun (task: Task<_*_>) ->
+                let op, ev = task.Result
+                let rec getTask op =
+                    match op with
+                    | Completed result -> 
+                        match result with
+                        | Success success -> 
+                            match success with
+                            | Value value -> Task.FromResult(value, ev)
+                            | WithEvents withEvents -> Task.FromResult(withEvents.Value, ev @ withEvents.Events)
+                        | Failure events -> 
+                            let tcs = new TaskCompletionSource<'a*'e list>()
+                            tcs.SetException(new OperationFailedException<'e>(ev @ events))
+                            tcs.Task
+                    | InProcess ip -> 
+                        if not (ip.IsFaulted || ip.IsCanceled)
+                        then let r,e = ip.Result
+                             Task.FromResult(r, ev @ e)
+                        else ip
+                    | Deferred deferred -> getTask deferred.Value
+                    | Cancelled _ ->
+                        let tcs = new TaskCompletionSource<'a*'e list>()
+                        tcs.SetCanceled()
+                        tcs.Task
+                getTask op).Unwrap() |> InProcess
+        | Deferred deferred -> lazy(unwrap deferred.Value) |> defer
+        | Cancelled events -> Cancelled events
+
+    /// If the Operation completes successfully, the given function will be executed on the value.
+    /// Otherwise the exisiting failure is propagated.
+    let rec bind<'a,'b,'e> (f: 'a -> Operation<'b,'e>) (operation: Operation<'a,'e>) = 
+        match operation with
+        | Completed result -> 
+            match result with
+            | Success success -> 
+                match success with
+                | Value value -> f value
+                | WithEvents withEvents -> withEvents.Events |> mergeEvents (f withEvents.Value)
+            | Failure events -> Failure events |> Completed
+        | InProcess inProcess -> 
+            inProcess.ContinueWith(fun (task: Task<'a*'e list>) -> 
+                let completionSource = new TaskCompletionSource<Operation<'b,'e>*'e list>()
+                if task.IsFaulted
+                then completionSource.SetException(task.Exception)
+                elif task.IsCanceled
+                then completionSource.SetCanceled()
+                else let (value, events) = task.Result
+                     completionSource.SetResult((f value, events))
+                completionSource.Task).Unwrap() |> InProcess |> unwrap
+        | Deferred deferred -> EventingLazy (lazy(deferred.Value |> bind f)) |> Deferred
+        | Cancelled events -> Cancelled events
+
     /// Map an Operation<'a,'e> into an Operation<'b,'e>
     let rec map<'a,'b,'e> (f: 'a -> 'b) (operation: Operation<'a,'e>) =
         match operation with
@@ -523,19 +599,6 @@ module Operation =
     let inline ofException<'result,'event> (except: exn) =
         Completed <| Result.ofException<'result,'event> except
 
-    /// Merges the given events into the existing operation
-    let rec mergeEvents operation events =
-        match operation with
-        | Completed result -> Completed <| Result.mergeEvents result events
-        | InProcess inProcess -> 
-            inProcess.ContinueWith(fun (task: Task<_*_>) ->
-                if not (task.IsFaulted || task.IsCanceled)
-                then let result,taskEvents = task.Result
-                     Task.FromResult(result, (taskEvents @ events))
-                else task).Unwrap() |> InProcess
-        | Deferred deferred -> lazy(mergeEvents deferred.Value events) |> defer
-        | Cancelled eventsSoFar -> events @ eventsSoFar |> Cancelled
-
     /// Executes the given function and returns a completed Operation with either a SuccessfulResult or the thrown exception in a Failure
     let inline catch f x = try success (f x) with | ex -> failure [ex]
 
@@ -580,31 +643,6 @@ module Operation =
         | Deferred _ as deferred -> deferred |> wait
         | Cancelled events -> events |> Failure
         |> Result.returnOrFail 
-
-    /// If the Operation completes successfully, the given function will be executed on the value.
-    /// Otherwise the exisiting failure is propagated.
-    let rec bind<'a,'b,'e> (f: 'a -> 'b) (operation: Operation<'a,'e>) = 
-        match operation with
-        | Completed result -> 
-            match result with
-            | Success success -> 
-                match success with
-                | Value value -> Result.success (f value)
-                | WithEvents withEvents -> Result.successWithEvents (f withEvents.Value) withEvents.Events
-            | Failure events -> Failure events
-            |> Completed
-        | InProcess inProcess -> 
-            inProcess.ContinueWith(fun (task: Task<'a*'e list>) -> 
-                let completionSource = new TaskCompletionSource<'b*'e list>()
-                if task.IsFaulted
-                then completionSource.SetException(task.Exception)
-                elif task.IsCanceled
-                then completionSource.SetCanceled()
-                else let (value, events) = task.Result
-                     completionSource.SetResult((f value, events))
-                completionSource.Task).Unwrap() |> InProcess
-        | Deferred deferred -> EventingLazy (lazy(deferred.Value |> bind f)) |> Deferred
-        | Cancelled events -> Cancelled events
 
     /// Flattens a nested Operation given the Event types are equal
     let inline flatten (result : Operation<Operation<_,_>,_>) =
