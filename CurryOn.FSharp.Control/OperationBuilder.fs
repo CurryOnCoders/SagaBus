@@ -118,9 +118,19 @@ module OperationBuilder =
 
     /// Binding function for operation results of different event types
     let inline bindResultAcross (result: OperationResult<'a,'aevent>) (cont: ('a*'aevent list) -> OperationStep<'b,'bevent>) =
-        match result with
-        | Success successfulResult -> cont (successfulResult.Result,[])
-        | Failure errors -> CompletedStep <| (new OperationFailedException<'aevent>(errors) |> Result.ofException<'b, 'bevent>)
+        if typeof<'bevent>.IsAssignableFrom(typeof<'aevent>)
+        then match result with
+             | Success successfulResult ->
+                match successfulResult with
+                | Value value -> cont (successfulResult.Result,[])
+                | WithEvents withEvents -> cont (successfulResult.Result, withEvents.Events)
+             | Failure errors -> CompletedStep <| Failure (errors |> List.map unbox<'bevent>)
+        else match result with
+             | Success successfulResult -> 
+                match successfulResult with
+                | Value value -> cont (successfulResult.Result,[])
+                | WithEvents withEvents -> cont (successfulResult.Result, withEvents.Events)
+             | Failure errors -> CompletedStep <| (new OperationFailedException<'aevent>(errors) |> Result.ofException<'b, 'bevent>)
 
     /// Primary binding function for operations
     let rec bind (op: Operation<'a,'event>) (cont: ('a*'event list) -> OperationStep<'b,'event>) =
