@@ -51,6 +51,7 @@
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Awaitable.fs" />
     <Compile Include="Operation.fs" />
     <Compile Include="OperationBuilder.fs" />
     <None Include="ReadMe.md" />

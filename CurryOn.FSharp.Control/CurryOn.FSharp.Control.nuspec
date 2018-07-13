@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>CurryOn.FSharp.Control</id>
-    <version>0.1.8</version>
+    <version>0.1.9</version>
     <title>CurryOn.FSharp.Control</title>
     <authors>CurryOn Coders</authors>
     <owners>CurryOn Coders</owners>
@@ -10,8 +10,8 @@
     <projectUrl>https://github.com/CurryOnCoders/CurryOn/tree/master/CurryOn.FSharp.Control</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Extends the FSharp.Control namespace to add Operations, a Railway-Oriented Programming framework compatible with Async Worfklows and the Task Parallel Library (TPL), including a Computation Expression Builder and library functions.</description>
-    <releaseNotes>Fixed bug in binding of different event types.</releaseNotes>
+    <releaseNotes>Added Awaitable type and await computation expression, allowing Async and Task to be mixed.</releaseNotes>
     <copyright>Copyright 2018</copyright>
-    <tags>Operation Railway ROP Result Task Async F#</tags>
+    <tags>Operation Railway ROP Result Task Async Await F#</tags>
   </metadata>
 </package>
