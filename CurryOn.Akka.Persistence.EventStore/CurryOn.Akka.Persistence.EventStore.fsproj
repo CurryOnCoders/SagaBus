@@ -63,34 +63,43 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Akka">
-      <HintPath>..\packages\Akka.1.2.3\lib\net45\Akka.dll</HintPath>
+      <HintPath>..\packages\Akka.1.3.8\lib\net45\Akka.dll</HintPath>
+    </Reference>
+    <Reference Include="Akka.FSharp">
+      <HintPath>..\packages\Akka.FSharp.1.3.8\lib\net45\Akka.FSharp.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence">
-      <HintPath>..\packages\Akka.Persistence.1.2.3.43-beta\lib\net45\Akka.Persistence.dll</HintPath>
+      <HintPath>..\packages\Akka.Persistence.1.3.8\lib\net45\Akka.Persistence.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence.FSharp">
-      <HintPath>..\packages\Akka.Persistence.FSharp.1.2.3.43-beta\lib\net45\Akka.Persistence.FSharp.dll</HintPath>
+      <HintPath>..\packages\Akka.Persistence.FSharp.1.3.8\lib\net45\Akka.Persistence.FSharp.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Persistence.Query">
-      <HintPath>..\packages\Akka.Persistence.Query.1.2.3.43-beta\lib\net45\Akka.Persistence.Query.dll</HintPath>
+      <HintPath>..\packages\Akka.Persistence.Query.1.3.8\lib\net45\Akka.Persistence.Query.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Serialization.Hyperion">
-      <HintPath>..\packages\Akka.Serialization.Hyperion.1.2.3.43-beta\lib\net45\Akka.Serialization.Hyperion.dll</HintPath>
+      <HintPath>..\packages\Akka.Serialization.Hyperion.1.3.8-beta66\lib\net45\Akka.Serialization.Hyperion.dll</HintPath>
     </Reference>
     <Reference Include="Akka.Streams">
-      <HintPath>..\packages\Akka.Streams.1.2.3\lib\net45\Akka.Streams.dll</HintPath>
+      <HintPath>..\packages\Akka.Streams.1.3.8\lib\net45\Akka.Streams.dll</HintPath>
     </Reference>
     <Reference Include="EventStore.ClientAPI">
       <HintPath>..\packages\EventStore.Client.4.0.3\lib\net40\EventStore.ClientAPI.dll</HintPath>
     </Reference>
     <Reference Include="FSharp.Core">
-      <HintPath>..\packages\FSharp.Core.4.1.17\lib\net45\FSharp.Core.dll</HintPath>
+      <HintPath>..\packages\FSharp.Core.4.2.3\lib\net45\FSharp.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.Quotations.Evaluator">
+      <HintPath>..\packages\FSharp.Quotations.Evaluator.1.1.2\lib\net45\FSharp.Quotations.Evaluator.dll</HintPath>
     </Reference>
     <Reference Include="FsPickler">
-      <HintPath>..\packages\FsPickler.3.2.0\lib\net45\FsPickler.dll</HintPath>
+      <HintPath>..\packages\FsPickler.5.2\lib\net45\FsPickler.dll</HintPath>
     </Reference>
     <Reference Include="FsPickler.Json">
-      <HintPath>..\packages\FsPickler.Json.3.2.0\lib\net45\FsPickler.Json.dll</HintPath>
+      <HintPath>..\packages\FsPickler.Json.5.0\lib\net45\FsPickler.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Google.Protobuf">
+      <HintPath>..\packages\Google.Protobuf.3.3.0\lib\net45\Google.Protobuf.dll</HintPath>
     </Reference>
     <Reference Include="Google.ProtocolBuffers">
       <HintPath>..\packages\Google.ProtocolBuffers.2.4.1.555\lib\net40\Google.ProtocolBuffers.dll</HintPath>
@@ -99,8 +108,9 @@
       <HintPath>..\packages\Google.ProtocolBuffers.2.4.1.555\lib\net40\Google.ProtocolBuffers.Serialization.dll</HintPath>
     </Reference>
     <Reference Include="Hyperion">
-      <HintPath>..\packages\Hyperion.0.9.2\lib\net45\Hyperion.dll</HintPath>
+      <HintPath>..\packages\Hyperion.0.9.8\lib\net45\Hyperion.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.CSharp" />
     <Reference Include="Microsoft.VisualStudio.Threading">
       <HintPath>..\packages\Microsoft.VisualStudio.Threading.15.4.4\lib\net45\Microsoft.VisualStudio.Threading.dll</HintPath>
     </Reference>
@@ -119,11 +129,13 @@
     <Reference Include="System.Collections.Immutable">
       <HintPath>..\packages\System.Collections.Immutable.1.3.1\lib\portable-net45+win8+wp8+wpa81\System.Collections.Immutable.dll</HintPath>
     </Reference>
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ValueTuple">
-      <HintPath>..\packages\System.ValueTuple.4.3.0\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
+      <HintPath>..\packages\System.ValueTuple.4.5.0\lib\netstandard1.0\System.ValueTuple.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System.Xml" />
   </ItemGroup>

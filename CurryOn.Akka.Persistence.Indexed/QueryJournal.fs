@@ -31,6 +31,11 @@ type IndexedQueryReadJournalBase (system: ExtendedActorSystem, config: Config, i
               .MapMaterializedValue(fun _ -> NotUsed.Instance)
               .Named("AllPesistenceIds") |> unbox<Source<string,NotUsed>>
 
+    member __.PersistenceIds () =
+        Source.ActorPublisher<string>(PersistenceIdsPublisher.Props(true, identifier))
+              .MapMaterializedValue(fun _ -> NotUsed.Instance)
+              .Named("AllPesistenceIds") |> unbox<Source<string,NotUsed>>
+
     member __.EventsByPersistenceId (persistenceId, fromSequence, toSequence) =
         Source.ActorPublisher<EventEnvelope>(EventsbyPersistenceIdPublisher.Props(true, persistenceId, fromSequence, toSequence, maxBufferSize, identifier))
               .MapMaterializedValue(fun _ -> NotUsed.Instance)
@@ -42,9 +47,9 @@ type IndexedQueryReadJournalBase (system: ExtendedActorSystem, config: Config, i
               .Named("EventsByTag") |> unbox<Source<EventEnvelope,NotUsed>>
 
     interface IReadJournal
-    interface IAllPersistenceIdsQuery with
-        member journal.AllPersistenceIds () = 
-            journal.AllPersistenceIds()           
+    interface IPersistenceIdsQuery with
+        member journal.PersistenceIds () = 
+            journal.PersistenceIds()           
     interface ICurrentEventsByPersistenceIdQuery with
         member journal.CurrentEventsByPersistenceId (persistenceId, fromSequence, toSequence) =
             journal.CurrentEventsByPersistenceId(persistenceId, fromSequence, toSequence)
