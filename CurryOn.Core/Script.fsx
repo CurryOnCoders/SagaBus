@@ -33,17 +33,16 @@ type DomainClassification =
 type DomainEntity =
     {
         Id: Guid;
-        Name: string<AggregateName>;
+        Name: string;
         Classification: DomainClassification;
     }
-    interface IEntity with
-        member this.Id = this.Id.ToString() |> EntityId.New
+    
 
 type DomainEvent =
     {
         Id: Guid;
-        Name: string<AggregateName>
-        Version: int<version>
+        Name: string
+        Version: int
     }
     member this.AggregateKey = this.Id.ToString() |> AggregateKey.New
     interface IEvent with
