@@ -30,7 +30,7 @@ type EventStorePersistenceTests () =
                 plugin = "akka.persistence.journal.event-store"
                 event-store {
                     class = "Akka.Persistence.EventStore.EventStoreJournal, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "corpweiapd001"
+                    server-name = "localhost"
                     write-batch-size = 4095
                     read-batch-size = 4095
                 }
@@ -39,7 +39,7 @@ type EventStorePersistenceTests () =
                 plugin = "akka.persistence.snapshot-store.event-store"
                 event-store {
                     class = "Akka.Persistence.EventStore.EventStoreSnapshotStore, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "corpweiapd001"
+                    server-name = "localhost"
                     read-batch-size = 4095
                 }
               }
@@ -47,7 +47,7 @@ type EventStorePersistenceTests () =
                 journal {
                   event-store {
                     class = "Akka.Persistence.EventStore.EventStoreReadJournalProvider, CurryOn.Akka.Persistence.EventStore"
-                    server-name = "corpweiapd001"
+                    server-name = "localhost"
                     read-batch-size = 4095
                   }
                 }  
@@ -103,6 +103,7 @@ type EventStorePersistenceTests () =
         sleep 2
 
         Assert.IsTrue(employees.Count > 0)
+
 
         for persistenceId in employees do
             let events = new System.Collections.Generic.List<EventEnvelope>()
