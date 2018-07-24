@@ -99,23 +99,20 @@ type EventStorePersistenceTests () =
         let employees = new System.Collections.Generic.List<string>()        
         
         let task = readJournal.CurrentPersistenceIds().RunForeach((fun id -> employees.Add(id)), materializer) |> Task.ofUnit |> Task.runSynchronously
-        //let task = readJournal.CurrentEventsByTag("all-employees", Offset.NoOffset()).RunForeach((fun id -> employees.Add(id.PersistenceId)), materializer) |> Task.ofUnit |> Task.runSynchronously
 
         sleep 2
 
         Assert.IsTrue(employees.Count > 0)
 
-<<<<<<< HEAD
-
         for persistenceId in employees do
-=======
+
         let emps = List.ofSeq(employees)
         let isEmpString (x:string) = x.Contains("all-employees")
 
         let filteredEmps = List.filter isEmpString emps
 
         for persistenceId in filteredEmps do
->>>>>>> update_to_1_3_8
+
             let events = new System.Collections.Generic.List<EventEnvelope>()
             readJournal.CurrentEventsByPersistenceId(persistenceId, 0L, 4095L).RunForeach((fun event -> events.Add(event)), materializer) |> Task.ofUnit |> Task.runSynchronously
             Assert.IsTrue(events.Count > 0)
