@@ -106,11 +106,11 @@ type EventStorePersistenceTests () =
         Assert.IsTrue(employees.Count > 0)
 
         let emps = List.ofSeq(employees)
-        let isEmpString (x:string) = x.Contains("employee")
+        let isEmpString (x:string) = x.Contains("all-employees")
 
         let filteredEmps = List.filter isEmpString emps
 
         for persistenceId in filteredEmps do
             let events = new System.Collections.Generic.List<EventEnvelope>()
-            readJournal.CurrentEventsByPersistenceId(persistenceId, 0L, Int64.MaxValue).RunForeach((fun event -> events.Add(event)), materializer) |> Task.ofUnit |> Task.runSynchronously
+            readJournal.CurrentEventsByPersistenceId(persistenceId, 0L, 4095L).RunForeach((fun event -> events.Add(event)), materializer) |> Task.ofUnit |> Task.runSynchronously
             Assert.IsTrue(events.Count > 0)
