@@ -13,7 +13,7 @@ module Serialization =
     let Utf8 = UTF8Encoding(false)
 
     // FsPickler Serializers
-    let private JsonSerializer = JsonSerializer(indent = true)
+    let private JsonSerializer = JsonSerializer(indent = true, omitHeader = true)
     let private BinarySerializer = BinarySerializer(forceLittleEndian = true)
     let private BsonSerializer = BsonSerializer()
     let private XmlSerializer = XmlSerializer(indent = true)    

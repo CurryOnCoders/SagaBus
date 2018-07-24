@@ -17,7 +17,7 @@ module internal PersistenceQuery =
         | None -> UnboundedLower
 
     let inline hitToEventEnvelope (hit: Hit<PersistedEvent>) =
-        EventEnvelope(hit.Id.ToInt(), hit.Document.PersistenceId, hit.Document.SequenceNumber, hit.Document.Event |> Serialization.parseJson<obj>)
+        EventEnvelope(Offset.Sequence(hit.Id.ToInt()), hit.Document.PersistenceId, hit.Document.SequenceNumber, hit.Document.Event |> Serialization.parseJson<obj>)
 
     let inline processHits (subscriber: ISubscriber<EventEnvelope>) (search: SearchResult<PersistedEvent>)  =
         search.Results.Hits

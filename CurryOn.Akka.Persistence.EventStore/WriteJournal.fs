@@ -159,7 +159,7 @@ module EventJournal =
                 operation {
                     let stopped = AsyncManualResetEvent(initialState = false)
                     let start = Math.Max(0L, first - 2L)
-                    let eventsToRead = Math.Min(last - start + 1L, max)
+                    let eventsToRead = Math.Min(last - start + 1L, (int64) readBatchSize)
 
                     let rec getEvents offset eventsSoFar =
                         task {

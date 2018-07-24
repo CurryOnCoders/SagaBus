@@ -27,7 +27,7 @@ type SalesOrder =
 type ElasticDslTests() =
     [<TestMethod>]
     member __.``Test Dsl.first`` () =
-        let settings = {Node = Uri "http://corpweiapd001:9200"; DisableDirectStreaming = true; RequestTimeout = TimeSpan.FromMinutes 1.0; DefaultIndex = Some "sales_orders"; IndexMappings = [{IndexName = "sales_orders"; TypeName = "sales_order"; Type = typeof<SalesOrder>}]}
+        let settings = {Node = Uri "http://localhost:9200"; DisableDirectStreaming = true; RequestTimeout = TimeSpan.FromMinutes 1.0; DefaultIndex = Some "sales_orders"; IndexMappings = [{IndexName = "sales_orders"; TypeName = "sales_order"; Type = typeof<SalesOrder>}]}
         let client = Elasticsearch.connect settings 
         let result = (MatchAll None) |> Dsl.first<SalesOrder> client None (FieldDirection ("id",Descending)) |> Operation.returnOrFail
         match result with

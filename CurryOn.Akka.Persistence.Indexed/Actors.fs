@@ -140,7 +140,7 @@ type EventsbyPersistenceIdPublisher (liveQuery, persistenceId, fromSequence, toS
             match message with
             | :? ReplayedMessage as replayed ->
                 let sequence = replayed.Persistent.SequenceNr
-                buffer.Buffer(new EventEnvelope(sequence, persistenceId, sequence, replayed.Persistent.Payload))
+                buffer.Buffer(new EventEnvelope(Offset.Sequence(sequence), persistenceId, sequence, replayed.Persistent.Payload))
                 currentSequence := sequence + 1L
                 buffer.Deliver(publisher.TotalDemand) |> handled
             | :? RecoverySuccess as success ->
@@ -224,7 +224,7 @@ type EventsByTagPublisher (liveQuery, tag, fromOffset, maxBufferSize: int64, plu
             | :? ReplayEvents as event ->
                 match event with
                 | ReplayedTaggedMessage (eventOffset,eventTag,persistent) ->
-                    buffer.Buffer(new EventEnvelope(eventOffset, persistent.PersistenceId, persistent.SequenceNr, persistent.Payload))
+                    buffer.Buffer(new EventEnvelope(Offset.Sequence(eventOffset), persistent.PersistenceId, persistent.SequenceNr, persistent.Payload))
                     currentOffset := eventOffset
                     buffer.Deliver(publisher.TotalDemand) |> handled
             | :? RecoverySuccess as success ->
