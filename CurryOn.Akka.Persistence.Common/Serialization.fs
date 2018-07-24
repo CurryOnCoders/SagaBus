@@ -10,7 +10,7 @@ open System.Reflection
 
 module Serialization =
     let private BinarySerializer = BinarySerializer()
-    let private JsonSerializer = JsonSerializer(indent = true)
+    let private JsonSerializer = JsonSerializer(indent = true, omitHeader = true)
 
     let toBinary any =
         use stream = new MemoryStream()

@@ -30,12 +30,15 @@ type StreamingQueryReadJournalBase<'provider when 'provider :> IStreamingEventJo
     member __.CurrentEventsByPersistenceId (persistenceId, fromSequence, toSequence) =
         Source.FromTask(journal.GetEvents persistenceId fromSequence toSequence Int64.MaxValue |> Operation.toTask)
               .SelectMany(fun events -> events)
-              .Select(fun event -> EventEnvelope(0L, event.PersistenceId, event.SequenceNr, event.Payload))
+              .Select(fun event -> EventEnvelope(Offset.NoOffset(), event.PersistenceId, event.SequenceNr, event.Payload))
 
-    member __.CurrentEventsByTag (tag, offset) =
-        Source.FromTask(journal.GetTaggedEvents tag (Some offset) None |> Operation.mapToTask (fun events-> events |> Seq.map (fun tagged -> tagged.Event)))
+    member __.CurrentEventsByTag (tag, offset: Offset) =
+        let offsetValue : int64 = match offset with 
+                                  | :? Sequence as x -> x.Value
+                                  | _ -> 0L
+        Source.FromTask(journal.GetTaggedEvents tag (Some offsetValue) None |> Operation.mapToTask (fun events-> events |> Seq.map (fun tagged -> tagged.Event)))
               .SelectMany(fun events -> events)
-              .Select(fun event -> EventEnvelope(0L, event.PersistenceId, event.SequenceNr, event.Payload))
+              .Select(fun event -> EventEnvelope(Offset.NoOffset(), event.PersistenceId, event.SequenceNr, event.Payload))
 
     member __.CurrentPersistenceIds () =
         Source.FromTask(journal.GetCurrentPersistenceIds() |> Operation.toTask)
@@ -47,16 +50,19 @@ type StreamingQueryReadJournalBase<'provider when 'provider :> IStreamingEventJo
     member __.EventsByPersistenceId (persistenceId, fromSequence, toSequence) =
         Source.FromPublisher(journal.SubscribeToEvents persistenceId fromSequence)
               .TakeWhile(fun event -> event.SequenceNumber <= toSequence)
-              .Select(fun event -> EventEnvelope(0L, event.PersistenceId, event.SequenceNumber, event.Event))
+              .Select(fun event -> EventEnvelope(Offset.NoOffset(), event.PersistenceId, event.SequenceNumber, event.Event))
 
-    member __.EventsByTag (tag, offset) =  
-        Source.FromPublisher(journal.SubscribeToEvents "$all" offset)
+    member __.EventsByTag (tag, offset: Offset) =  
+        let offsetValue : int64 = match offset with
+                                  | :? Sequence as x -> x.Value
+                                  | _ -> 0L
+        Source.FromPublisher(journal.SubscribeToEvents "$all" offsetValue)
               .Where(fun event -> event.Tags |> Seq.contains tag)
-              .Select(fun event -> EventEnvelope(0L, event.PersistenceId, event.SequenceNumber, event.Event))            
+              .Select(fun event -> EventEnvelope(Offset.NoOffset(), event.PersistenceId, event.SequenceNumber, event.Event))            
 
     interface IReadJournal
-    interface IAllPersistenceIdsQuery with
-        member journal.AllPersistenceIds () = 
+    interface IPersistenceIdsQuery with
+        member journal.PersistenceIds () = 
             journal.AllPersistenceIds()           
     interface ICurrentEventsByPersistenceIdQuery with
         member journal.CurrentEventsByPersistenceId (persistenceId, fromSequence, toSequence) =
