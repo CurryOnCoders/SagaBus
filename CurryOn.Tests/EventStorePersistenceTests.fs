@@ -104,8 +104,6 @@ type EventStorePersistenceTests () =
 
         Assert.IsTrue(employees.Count > 0)
 
-        for persistenceId in employees do
-
         let emps = List.ofSeq(employees)
         let isEmpString (x:string) = x.Contains("all-employees")
 
