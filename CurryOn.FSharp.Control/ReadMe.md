@@ -89,7 +89,7 @@ let writeFile fileName contents =
         let! file = getFile fileName
         let stream = file.OpenWrite()
         do! stream.AsyncWrite contents
-        return! if file.DirectoryName = Environment.SystemDirectory
+        return! if file.DirectoryName <> Environment.SystemDirectory
                 then Result.success ()
                 else Result.successWithEvents () [FileIsInSystemRootWarning]
     }
