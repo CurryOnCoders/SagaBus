@@ -99,7 +99,7 @@ module Result =
         | ex -> 
             let union = FSharpType.GetUnionCases(typeof<OperationResult<'result, 'event>>)
             if typeof<'event>.IsAssignableFrom(typeof<exn>)
-            then FSharpValue.MakeUnion(union.[1], [|[ex] |> box|]) |> unbox<OperationResult<'result, 'event>>
+            then FSharpValue.MakeUnion(union.[1], [|[ex |> box :?> 'event] |> box|]) |> unbox<OperationResult<'result, 'event>>
             elif FSharpType.IsUnion typeof<'event>
             then let cases = FSharpType.GetUnionCases(typeof<'event>)
                  match cases |> Seq.tryFind (fun case -> case.Fields.Length = 1 && case.Fields.[0].PropertyType.IsAssignableFrom(typeof<exn>)) with
