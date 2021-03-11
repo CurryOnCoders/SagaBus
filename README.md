@@ -1,4 +1,4 @@
-# CurryOn
+# CurryOn SagaBus
 An initiative for building frameworks and packages for F# to enable development of modern applications using the principles of Domain-Driven Design.  Includes projects to facilitate Event Sourcing, CQRS, and Railway-Oriented Programming, as well as libraries of common tools to simplify Enterprise development in F#.
 
 ## Projects
