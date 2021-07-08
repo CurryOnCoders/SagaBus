@@ -53,7 +53,7 @@ type SuccessfulResultWithEvents<'result,'event> =
     }
 ```
 
-This allows the framework to support a usage pattern where a successful Operation can also return domain events, or carry Warnings or Informational messages along with the resulting value.  To use the framework in this way, it is common practice to create a discriminated union representing the possible errors, warnings, or domain events.  Then, the events can be propogated from one operation to another, such as in the following examples:
+This allows the framework to support a usage pattern where a successful Operation can also return domain events, or carry Warnings or Informational messages along with the resulting value.  To use the framework in this way, it is common practice to create a discriminated union representing the possible errors, warnings, or domain events.  Then, the events can be propagated from one operation to another, such as in the following examples:
 
 ```fsharp
 type FileAccessEvents =
@@ -95,7 +95,7 @@ let writeFile fileName contents =
     }
 ```
 
-When used in this way, the Operation framework allows for informational messages or domain events to be propogated from one operation to another, such that calling `readFile` (with a file that exists) would return a Success with two events, FileOpenedSuccessfully and FileReadSuccessfully.  It also allows any known errors and warnings to be handled and returned from one Operation to another, terminating when a Failure is encountered without running Operations farther down the chain.  Any unforseen exceptions that may still be raised will be captured with the `UnhandledException` case.  It is recommended to include a case such as this in any discrimintaed union used for the `'event` type of an Operation, as the framework contains special logic to seek out a union case with a single field of type `exn` when an uhandled exception is thrown from an Operation.  This allows the exception to be captured and returned without changing the type of the Operation from `Operation<'result,'event>` to `Operation<'result,exn>`.  If the Operation is already of type `Operation<'result,exn>`, the unhandled exception is returned in the list of exceptions in the Failure case of the OperationResult.
+When used in this way, the Operation framework allows for informational messages or domain events to be propagated from one operation to another, such that calling `readFile` (with a file that exists) would return a Success with two events, FileOpenedSuccessfully and FileReadSuccessfully.  It also allows any known errors and warnings to be handled and returned from one Operation to another, terminating when a Failure is encountered without running Operations farther down the chain.  Any unforeseen exceptions that may still be raised will be captured with the `UnhandledException` case.  It is recommended to include a case such as this in any discriminated union used for the `'event` type of an Operation, as the framework contains special logic to seek out a union case with a single field of type `exn` when an unhandled exception is thrown from an Operation.  This allows the exception to be captured and returned without changing the type of the Operation from `Operation<'result,'event>` to `Operation<'result,exn>`.  If the Operation is already of type `Operation<'result,exn>`, the unhandled exception is returned in the list of exceptions in the Failure case of the OperationResult.
 
 ### Railway-Oriented Programming
 In addition to the Operation computation builder, the framework also includes the standard Railway-Oriented Programming functions and operators for working with `OperationResults` and a similar set for working with `Operations`.
@@ -154,7 +154,7 @@ When working with `Operations`, the operators typically have an additional chara
 `lift`:   `<!>` for OperationResults, `<!!>` for Operations
 
 #### Working with Operations and OperationResults
-To faciliate working with Operations and OperationResults, the framework provides a library of functions to simplify the interpretation, evaluation, and combination of Operations and their results.  
+To facilitate working with Operations and OperationResults, the framework provides a library of functions to simplify the interpretation, evaluation, and combination of Operations and their results.  
 
 `Result.ok` can be used to test whether an OperationResult is successful.
 
@@ -215,7 +215,7 @@ let copyFile inputFile outputFile =
 copyFile "input.txt" "output.txt" |> Operation.returnOrFail
 ```
 
-If the preceeding example is executed in F# interactive, assuming the files "input.txt" and "output.txt" don't exist, the result would be an exception similar to the following:
+If the preceding example is executed in F# interactive, assuming the files "input.txt" and "output.txt" don't exist, the result would be an exception similar to the following:
 
 ```
 System.Exception: FileNotFound "C:\Users\userName\AppData\Local\Temp\input.txt"
@@ -247,7 +247,7 @@ let fetchUrl (url: string) =
 This returns an `Async<OperationResult<string,exn> []>`.  Passing the result of `Operation.Parallel` into `Async.RunSynchronously` returns an array of results with the HTML strings of each successful request.
 
 #### Asynchronous and Lazy Operations
-By default, Operations start to execute immediatley.  If the Operation Computation contains only synchronous code and does not call any other Operations, it will likely execute fully and return a Completed Operation.  If the Operation Computation calls any Task or Async-returning methods, or if it calls other Operations, the execution of the Operation will be paused while waiting for the Task/Async or the other Operation to complete, and the Computation will generally return an InProcess Operation.  If there is a need to asynchronously start an Operation containing only synchronous code, such as a long-running Operation that should not block the current thread, the `start_operation` Computation can be used instead:
+By default, Operations start to execute immediately.  If the Operation Computation contains only synchronous code and does not call any other Operations, it will likely execute fully and return a Completed Operation.  If the Operation Computation calls any Task or Async-returning methods, or if it calls other Operations, the execution of the Operation will be paused while waiting for the Task/Async or the other Operation to complete, and the Computation will generally return an InProcess Operation.  If there is a need to asynchronously start an Operation containing only synchronous code, such as a long-running Operation that should not block the current thread, the `start_operation` Computation can be used instead:
 
 ```fsharp
 let asyncOp =
